@@ -497,7 +497,10 @@ CREATE INDEX IF NOT EXISTS idx_provider_freshness_updated_at
 // header ID, and native Pi sessions with a resolved parent are classified as
 // forks. Re-parse stored native Pi sessions to repair lineage edges and fork
 // classification.)
-const dataVersion = 110
+// (111: Claude and Codex retain parser-proven conversation prose and source
+// message identity in SQLite-only export state. Reparse unchanged sources to
+// populate this evidence; source-less archived content remains an explicit gap.)
+const dataVersion = 111
 
 const tokenCoverageRepairStatsKey = "token_coverage_repair_v1"
 
@@ -1283,7 +1286,7 @@ func open(
 	if err := ctx.Err(); err != nil {
 		return closeOnError(err)
 	}
-	if err := d.migrateColumns(ctx, progress); err != nil {
+	if err := d.migrateColumns(ctx, dataStale || schemaRepairNeeded, progress); err != nil {
 		return closeOnError(fmt.Errorf("migrating columns: %w", err))
 	}
 	progress.report("Finalizing database setup")
@@ -1819,6 +1822,8 @@ var readOnlyRequiredTables = []string{
 	"artifact_checkpoint_stages",
 	"artifact_checkpoint_stage_sessions",
 	"artifact_imported_sessions",
+	"conversation_messages",
+	"conversation_session_changes",
 }
 
 var (
@@ -2886,7 +2891,7 @@ END;
 // migrateColumns adds columns introduced by this branch to databases created
 // by older releases, then runs the data repairs required by a normal writable
 // startup. Schema-only callers use applySchemaColumnMigrations directly.
-func (db *DB) migrateColumns(ctx context.Context, progress OpenProgressFunc) error {
+func (db *DB) migrateColumns(ctx context.Context, rebuildPending bool, progress OpenProgressFunc) error {
 	db.mu.Lock()
 	defer db.mu.Unlock()
 	w := db.getWriter()
@@ -2910,6 +2915,9 @@ func (db *DB) migrateColumns(ctx context.Context, progress OpenProgressFunc) err
 		return err
 	}
 	if err := applySchemaColumnMigrations(w, progress); err != nil {
+		return err
+	}
+	if err := ensureConversationSchemaLocked(ctx, w, rebuildPending); err != nil {
 		return err
 	}
 	if _, err := w.ExecContext(ctx, artifactSessionQueueTriggerCreatesSQL); err != nil {
