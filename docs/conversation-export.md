@@ -19,6 +19,9 @@ discard the existing archive. Orphans without extraction evidence remain gaps.
 The upgrade does not assign temporary message IDs before reparsing: consumers
 receive the real projection or an orphan gap, not deletions of placeholders.
 
+Only conversation exports require the conversation tables. Existing session and
+reporting exports can still read an otherwise compatible archive without them.
+
 ## Source coverage
 
 | Source                                         | Text available                                                                  | Limits                                                                                                                  |

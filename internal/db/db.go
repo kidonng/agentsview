@@ -1828,8 +1828,6 @@ var readOnlyRequiredTables = []string{
 	"artifact_checkpoint_stages",
 	"artifact_checkpoint_stage_sessions",
 	"artifact_imported_sessions",
-	"conversation_messages",
-	"conversation_session_changes",
 }
 
 var (

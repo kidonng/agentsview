@@ -16,20 +16,34 @@ import (
 	"go.kenn.io/agentsview/internal/dbtest"
 )
 
-func TestExportConversationsDoesNotUpgradeArchive(t *testing.T) {
-	path := filepath.Join(testDataDir(t), "sessions.db")
-	database := dbtest.OpenTestDBAt(t, path)
+func TestExportConversationSchemaIsRequiredOnlyForConversations(t *testing.T) {
+	database := seedExportSessionsArchive(t)
+	path := database.Path()
 	require.NoError(t, database.Close())
 	raw, err := sql.Open("sqlite3", path)
 	require.NoError(t, err)
-	_, err = raw.Exec(`DROP TABLE conversation_messages`)
+	_, err = raw.Exec(`DROP TABLE conversation_messages; DROP TABLE conversation_session_changes`)
 	require.NoError(t, err)
 	require.NoError(t, raw.Close())
 	before, err := os.ReadFile(path)
 	require.NoError(t, err)
-	stdout, _, err := executeExportSessionsCommand(newRootCommand(), "export", "conversations", "changes")
-	require.Error(t, err)
-	assert.Empty(t, stdout)
+	stdout, stderr, err := executeExportSessionsCommand(newRootCommand(), "export", "sessions", "--format", "json")
+	require.NoError(t, err)
+	assert.Empty(t, stderr)
+	document := decodeExportSessionsDocument(t, stdout)
+	require.Len(t, document.Sessions, 2)
+	assert.Equal(t, "alpha-new", document.Sessions[0].ID)
+	assert.Equal(t, "alpha-old", document.Sessions[1].ID)
+	for _, args := range [][]string{
+		{"export", "conversations", "changes"},
+		{"export", "conversations", "message", "alpha-new", "message-a", "--revision", "1", "--database-id", "export-sessions-test-db"},
+	} {
+		stdout, _, err := executeExportSessionsCommand(newRootCommand(), args...)
+		require.Error(t, err)
+		assert.True(t, db.IsSchemaUpgradeRequired(err))
+		assert.Contains(t, err.Error(), "agentsview daemon restart")
+		assert.Empty(t, stdout)
+	}
 	after, err := os.ReadFile(path)
 	require.NoError(t, err)
 	assert.Equal(t, before, after, "read-only export must not run archive migrations")

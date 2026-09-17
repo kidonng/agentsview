@@ -111,7 +111,7 @@ func writeConversationExportError(command *cobra.Command, cause error) error {
 		code, result.Error = 5, "revision_changed"
 		result.Message = "this message revision was superseded; read the next changes cycle for its current state"
 	default:
-		return cause
+		return schemaUpgradeHint(cause)
 	}
 	if err := json.MarshalEncode(jsontext.NewEncoder(command.ErrOrStderr()), result); err != nil {
 		return err

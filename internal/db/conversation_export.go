@@ -193,6 +193,17 @@ func (db *DB) ExportConversationChanges(ctx context.Context, opts ConversationEx
 }
 
 func conversationArchiveIdentity(ctx context.Context, tx *sql.Tx) (string, string, error) {
+	for _, table := range []string{"conversation_messages", "conversation_session_changes"} {
+		var present bool
+		if err := tx.QueryRowContext(ctx, `SELECT EXISTS(
+			SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?
+		)`, table).Scan(&present); err != nil {
+			return "", "", fmt.Errorf("checking conversation export schema: %w", err)
+		}
+		if !present {
+			return "", "", &SchemaUpgradeRequiredError{Table: table, Column: "session_id"}
+		}
+	}
 	archiveID, err := sessionExportMetadataValue(ctx, tx, archiveMetadataArchiveIDKey, ErrArchiveIDMissing, "archive id")
 	if err != nil {
 		return "", "", err

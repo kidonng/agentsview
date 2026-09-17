@@ -511,10 +511,14 @@ func TestConversationExportLegacyArchiveGaps(t *testing.T) {
 			path := d.Path()
 			require.NoError(t, d.Close())
 			if mode == "upgrade" {
-				_, err := OpenReadOnly(path)
+				readOnly, err := OpenReadOnly(path)
+				require.NoError(t, err)
+				t.Cleanup(func() { require.NoError(t, readOnly.Close()) })
+				_, err = readOnly.ExportConversationChanges(t.Context(), ConversationExportOptions{})
 				require.Error(t, err)
 				var schemaErr *SchemaUpgradeRequiredError
 				require.ErrorAs(t, err, &schemaErr)
+				require.NoError(t, readOnly.Close())
 				var openErr error
 				d, openErr = Open(path)
 				require.NoError(t, openErr)
