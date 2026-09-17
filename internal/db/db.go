@@ -1220,6 +1220,12 @@ func OpenFreshIsolatedContext(ctx context.Context, path string) (*DB, error) {
 	closeOnError := func(err error) (*DB, error) {
 		return nil, errors.Join(err, d.CloseContext(ctx))
 	}
+	d.mu.Lock()
+	err = ensureConversationSchemaLocked(ctx, d.getWriter(), false)
+	d.mu.Unlock()
+	if err != nil {
+		return closeOnError(fmt.Errorf("initializing conversation export state: %w", err))
+	}
 	if _, err := d.GetOrCreateDatabaseID(ctx); err != nil {
 		return closeOnError(fmt.Errorf("initializing database id: %w", err))
 	}

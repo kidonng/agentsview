@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -14,6 +15,41 @@ import (
 	"go.kenn.io/agentsview/internal/config"
 	"go.kenn.io/agentsview/internal/export"
 )
+
+func TestConversationExportFreshArchiveSurvivesReopen(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "capture.db")
+	require.NoError(t, os.WriteFile(path, nil, 0o600))
+	d, err := OpenFreshIsolatedContext(t.Context(), path)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, d.Close()) })
+	require.NoError(t, d.UpsertSession(Session{ID: "chat", Project: "sample", Machine: "local", Agent: "claude"}))
+	require.NoError(t, d.InsertMessages([]Message{{
+		SessionID: "chat", Role: "user", Content: "Check this code",
+		VisibleText: new("Check this code"), ConversationSourceID: "user-one",
+	}}))
+	initial, err := d.ExportConversationChanges(t.Context(), ConversationExportOptions{})
+	require.NoError(t, err)
+	require.Len(t, initial.Changes, 1)
+	change := initial.Changes[0]
+	assert.Empty(t, change.Gap)
+	body, err := d.GetConversationMessage(t.Context(), ConversationMessageOptions{
+		DatabaseID: initial.DatabaseID, SessionID: "chat", MessageID: change.MessageID, Revision: change.Revision,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, body.Text)
+	assert.Equal(t, "Check this code", *body.Text)
+
+	require.NoError(t, d.Close())
+	reopened, err := OpenIsolated(path)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, reopened.Close()) })
+	current, err := reopened.ExportConversationChanges(t.Context(), ConversationExportOptions{})
+	require.NoError(t, err)
+	assert.Equal(t, initial.Changes, current.Changes, "reopening must preserve identities without adding placeholder gaps")
+	delta, err := reopened.ExportConversationChanges(t.Context(), ConversationExportOptions{Checkpoint: initial.Checkpoint})
+	require.NoError(t, err)
+	assert.Empty(t, delta.Changes)
+}
 
 // A token-only rewrite must not resend prose, while a streamed text change
 // must retain the source message's identity and publish the new body.
