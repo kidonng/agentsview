@@ -15,6 +15,9 @@ import (
 )
 
 func TestHandleSessionTiming_OK(t *testing.T) {
+	assert := assert.New(t)
+	require := require.New(t)
+
 	te := setup(t)
 	seedTimingFixture(t, te.db, "timing-handler-ok")
 
@@ -22,12 +25,12 @@ func TestHandleSessionTiming_OK(t *testing.T) {
 	assertStatus(t, w, http.StatusOK)
 
 	got := decode[db.SessionTiming](t, w)
-	assert.Equal(t, "timing-handler-ok", got.SessionID)
-	assert.Equal(t, 1, got.TurnCount)
-	assert.Equal(t, 1, got.ToolCallCount)
-	require.Len(t, got.Turns, 1)
-	require.NotNil(t, got.Turns[0].DurationMs)
-	assert.Equal(t, int64(29_000), *got.Turns[0].DurationMs)
+	assert.Equal("timing-handler-ok", got.SessionID)
+	assert.Equal(1, got.TurnCount)
+	assert.Equal(1, got.ToolCallCount)
+	require.Len(got.Turns, 1)
+	require.NotNil(got.Turns[0].DurationMs)
+	assert.Equal(int64(29_000), *got.Turns[0].DurationMs)
 }
 
 func TestHandleSessionTiming_NotFound(t *testing.T) {
@@ -94,17 +97,20 @@ func seedTimingFixture(t *testing.T, d *db.DB, sessionID string) {
 }
 
 func TestHandleSessionTimingWithoutCallsMatchesContract(t *testing.T) {
+	assert := assert.New(t)
+	require := require.New(t)
+
 	te := setup(t)
 	dbtest.SeedSession(t, te.db, "timing-no-calls", "timing-test")
 	w := te.get(t, "/api/v1/sessions/timing-no-calls/timing")
 	assertStatus(t, w, http.StatusOK)
 	var body map[string]any
-	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
-	require.Contains(t, body, "slowest_call")
-	assert.Nil(t, body["slowest_call"])
+	require.NoError(json.Unmarshal(w.Body.Bytes(), &body))
+	require.Contains(body, "slowest_call")
+	assert.Nil(body["slowest_call"])
 	spec := server.OpenAPISpec(server.VersionInfo{})
 	schema := spec.Paths["/api/v1/sessions/{id}/timing"].Get.Responses["200"].Content["application/json"].Schema
 	result := &huma.ValidateResult{}
 	huma.Validate(spec.Components.Schemas, schema, &huma.PathBuffer{}, huma.ModeReadFromServer, body, result)
-	assert.Empty(t, result.Errors)
+	assert.Empty(result.Errors)
 }

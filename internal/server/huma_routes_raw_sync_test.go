@@ -19,6 +19,9 @@ import (
 )
 
 func TestRawSyncTokenExchangeBypassesLegacyBearerAndUsesNamedScopes(t *testing.T) {
+	assert := assert.New(t)
+	require := require.New(t)
+
 	t.Parallel()
 
 	expiresAt := time.Date(2026, time.August, 19, 12, 0, 0, 0, time.UTC)
@@ -28,8 +31,8 @@ func TestRawSyncTokenExchangeBypassesLegacyBearerAndUsesNamedScopes(t *testing.T
 			deviceID string,
 			credential string,
 		) (rawsync.AuthIdentity, error) {
-			assert.Equal(t, "dev_test", deviceID)
-			assert.Equal(t, "avdc_test", credential)
+			assert.Equal("dev_test", deviceID)
+			assert.Equal("avdc_test", credential)
 			return rawsync.AuthIdentity{
 				TenantID: "tenant-from-auth",
 				DeviceID: "dev_test",
@@ -41,9 +44,9 @@ func TestRawSyncTokenExchangeBypassesLegacyBearerAndUsesNamedScopes(t *testing.T
 			credential string,
 			scopes rawsync.DeviceTokenScope,
 		) (rawsync.IssuedDeviceToken, error) {
-			assert.Equal(t, "dev_test", deviceID)
-			assert.Equal(t, "avdc_test", credential)
-			assert.Equal(t, rawsync.ScopeNegotiate|rawsync.ScopeCommit, scopes)
+			assert.Equal("dev_test", deviceID)
+			assert.Equal("avdc_test", credential)
+			assert.Equal(rawsync.ScopeNegotiate|rawsync.ScopeCommit, scopes)
 			return rawsync.IssuedDeviceToken{
 				Token: "avdt_test",
 				Identity: rawsync.AuthIdentity{
@@ -63,22 +66,25 @@ func TestRawSyncTokenExchangeBypassesLegacyBearerAndUsesNamedScopes(t *testing.T
 		"avdc_test", "dev_test",
 	)
 
-	require.Equal(t, http.StatusOK, recorder.Code, recorder.Body.String())
+	require.Equal(http.StatusOK, recorder.Code, recorder.Body.String())
 	var response struct {
 		Token     string    `json:"token"`
 		DeviceID  string    `json:"device_id"`
 		Scopes    []string  `json:"scopes"`
 		ExpiresAt time.Time `json:"expires_at"`
 	}
-	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &response))
-	assert.Equal(t, "avdt_test", response.Token)
-	assert.Equal(t, "dev_test", response.DeviceID)
-	assert.Equal(t, []string{"negotiate", "commit"}, response.Scopes)
-	assert.Equal(t, expiresAt, response.ExpiresAt)
-	assert.Equal(t, 1, auth.issueCalls)
+	require.NoError(json.Unmarshal(recorder.Body.Bytes(), &response))
+	assert.Equal("avdt_test", response.Token)
+	assert.Equal("dev_test", response.DeviceID)
+	assert.Equal([]string{"negotiate", "commit"}, response.Scopes)
+	assert.Equal(expiresAt, response.ExpiresAt)
+	assert.Equal(1, auth.issueCalls)
 }
 
 func TestRawSyncNegotiationDerivesTenantAndDeviceFromScopedToken(t *testing.T) {
+	assert := assert.New(t)
+	require := require.New(t)
+
 	t.Parallel()
 
 	first := rawsync.ObjectRef{SHA256: strings.Repeat("1", 64), Length: 10}
@@ -90,8 +96,8 @@ func TestRawSyncNegotiationDerivesTenantAndDeviceFromScopedToken(t *testing.T) {
 			token string,
 			required rawsync.DeviceTokenScope,
 		) (rawsync.AuthIdentity, error) {
-			assert.Equal(t, "avdt_negotiate", token)
-			assert.Equal(t, rawsync.ScopeNegotiate, required)
+			assert.Equal("avdt_negotiate", token)
+			assert.Equal(rawsync.ScopeNegotiate, required)
 			return identity, nil
 		},
 	}
@@ -102,9 +108,9 @@ func TestRawSyncNegotiationDerivesTenantAndDeviceFromScopedToken(t *testing.T) {
 			provider parser.AgentType,
 			objects []rawsync.ObjectRef,
 		) ([]rawsync.ObjectRef, error) {
-			assert.Equal(t, identity, gotIdentity)
-			assert.Equal(t, parser.AgentCodex, provider)
-			assert.Equal(t, []rawsync.ObjectRef{first, second}, objects)
+			assert.Equal(identity, gotIdentity)
+			assert.Equal(parser.AgentCodex, provider)
+			assert.Equal([]rawsync.ObjectRef{first, second}, objects)
 			return []rawsync.ObjectRef{second}, nil
 		},
 	}
@@ -113,24 +119,27 @@ func TestRawSyncNegotiationDerivesTenantAndDeviceFromScopedToken(t *testing.T) {
 		"provider": parser.AgentCodex,
 		"objects":  []rawsync.ObjectRef{first, second},
 	})
-	require.NoError(t, err)
+	require.NoError(err)
 
 	recorder := serveRawSyncJSON(
 		t, srv, http.MethodPost, "/api/v1/raw-sync/objects/missing",
 		string(body), "avdt_negotiate", "",
 	)
 
-	require.Equal(t, http.StatusOK, recorder.Code, recorder.Body.String())
+	require.Equal(http.StatusOK, recorder.Code, recorder.Body.String())
 	var response struct {
 		Missing []rawsync.ObjectRef `json:"missing"`
 	}
-	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &response))
-	assert.Equal(t, []rawsync.ObjectRef{second}, response.Missing)
-	assert.Equal(t, 1, auth.authenticateCalls)
-	assert.Equal(t, 1, custody.missingCalls)
+	require.NoError(json.Unmarshal(recorder.Body.Bytes(), &response))
+	assert.Equal([]rawsync.ObjectRef{second}, response.Missing)
+	assert.Equal(1, auth.authenticateCalls)
+	assert.Equal(1, custody.missingCalls)
 }
 
 func TestRawSyncManifestCommitReturnsDurableReceipt(t *testing.T) {
+	assert := assert.New(t)
+	require := require.New(t)
+
 	t.Parallel()
 
 	identity := rawsync.AuthIdentity{TenantID: "tenant-a", DeviceID: "dev-a"}
@@ -141,8 +150,8 @@ func TestRawSyncManifestCommitReturnsDurableReceipt(t *testing.T) {
 			token string,
 			required rawsync.DeviceTokenScope,
 		) (rawsync.AuthIdentity, error) {
-			assert.Equal(t, "avdt_commit", token)
-			assert.Equal(t, rawsync.ScopeCommit, required)
+			assert.Equal("avdt_commit", token)
+			assert.Equal(rawsync.ScopeCommit, required)
 			return identity, nil
 		},
 	}
@@ -152,8 +161,8 @@ func TestRawSyncManifestCommitReturnsDurableReceipt(t *testing.T) {
 			gotIdentity rawsync.AuthIdentity,
 			gotManifest rawsync.Manifest,
 		) (rawsync.CommitResult, error) {
-			assert.Equal(t, identity, gotIdentity)
-			assert.Equal(t, manifest, gotManifest)
+			assert.Equal(identity, gotIdentity)
+			assert.Equal(manifest, gotManifest)
 			return rawsync.CommitResult{
 				ManifestID: strings.Repeat("a", 64),
 				Receipt:    strings.Repeat("b", 64),
@@ -164,26 +173,26 @@ func TestRawSyncManifestCommitReturnsDurableReceipt(t *testing.T) {
 	}
 	srv := newRawSyncHTTPTestServer(t, auth, custody)
 	body, err := json.Marshal(manifest)
-	require.NoError(t, err)
+	require.NoError(err)
 
 	recorder := serveRawSyncJSON(
 		t, srv, http.MethodPost, "/api/v1/raw-sync/manifests",
 		string(body), "avdt_commit", "",
 	)
 
-	require.Equal(t, http.StatusOK, recorder.Code, recorder.Body.String())
+	require.Equal(http.StatusOK, recorder.Code, recorder.Body.String())
 	var response struct {
 		ManifestID string `json:"manifest_id"`
 		Receipt    string `json:"receipt"`
 		Generation int64  `json:"generation"`
 		Created    bool   `json:"created"`
 	}
-	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &response))
-	assert.Equal(t, strings.Repeat("a", 64), response.ManifestID)
-	assert.Equal(t, strings.Repeat("b", 64), response.Receipt)
-	assert.Equal(t, int64(7), response.Generation)
-	assert.True(t, response.Created)
-	assert.Equal(t, 1, custody.commitCalls)
+	require.NoError(json.Unmarshal(recorder.Body.Bytes(), &response))
+	assert.Equal(strings.Repeat("a", 64), response.ManifestID)
+	assert.Equal(strings.Repeat("b", 64), response.Receipt)
+	assert.Equal(int64(7), response.Generation)
+	assert.True(response.Created)
+	assert.Equal(1, custody.commitCalls)
 }
 
 func TestRawSyncRejectsUnauthorizedTokenBeforeCustody(t *testing.T) {
@@ -261,6 +270,9 @@ func TestRawSyncIgnoresInjectedTenantAndUsesAuthenticatedIdentity(t *testing.T) 
 }
 
 func TestRawSyncHeadConflictReturnsReconciliationState(t *testing.T) {
+	assert := assert.New(t)
+	require := require.New(t)
+
 	t.Parallel()
 
 	currentManifest := strings.Repeat("c", 64)
@@ -289,23 +301,25 @@ func TestRawSyncHeadConflictReturnsReconciliationState(t *testing.T) {
 	}
 	srv := newRawSyncHTTPTestServer(t, auth, custody)
 	body, err := json.Marshal(rawHTTPTestManifest())
-	require.NoError(t, err)
+	require.NoError(err)
 
 	recorder := serveRawSyncJSON(
 		t, srv, http.MethodPost, "/api/v1/raw-sync/manifests",
 		string(body), "avdt_commit", "",
 	)
 
-	require.Equal(t, http.StatusConflict, recorder.Code, recorder.Body.String())
+	require.Equal(http.StatusConflict, recorder.Code, recorder.Body.String())
 	var response apiErrorResponse
-	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &response))
-	assert.Equal(t, "head_conflict", response.Code)
-	assert.Equal(t, currentManifest, response.CurrentManifestID)
-	assert.Equal(t, currentReceipt, response.CurrentReceipt)
-	assert.Equal(t, int64(9), response.CurrentGeneration)
+	require.NoError(json.Unmarshal(recorder.Body.Bytes(), &response))
+	assert.Equal("head_conflict", response.Code)
+	assert.Equal(currentManifest, response.CurrentManifestID)
+	assert.Equal(currentReceipt, response.CurrentReceipt)
+	assert.Equal(int64(9), response.CurrentGeneration)
 }
 
 func TestRawSyncMissingObjectErrorDoesNotLeakBackendDetail(t *testing.T) {
+	assert := assert.New(t)
+
 	t.Parallel()
 
 	digest := strings.Repeat("e", 64)
@@ -338,9 +352,9 @@ func TestRawSyncMissingObjectErrorDoesNotLeakBackendDetail(t *testing.T) {
 		string(body), "avdt_commit", "",
 	)
 
-	assert.Equal(t, http.StatusConflict, recorder.Code)
-	assert.Contains(t, recorder.Body.String(), `"code":"missing_object"`)
-	assert.NotContains(t, recorder.Body.String(), digest)
+	assert.Equal(http.StatusConflict, recorder.Code)
+	assert.Contains(recorder.Body.String(), `"code":"missing_object"`)
+	assert.NotContains(recorder.Body.String(), digest)
 }
 
 func TestRawSyncCustodyDeadlineReturnsGatewayTimeout(t *testing.T) {
@@ -526,7 +540,7 @@ func TestRawSyncTokenPreflightAllowsDeviceIDHeader(t *testing.T) {
 	srv := newRawSyncHTTPTestServer(
 		t, new(rawSyncAuthStub), new(rawSyncCustodyStub),
 	)
-	req := httptest.NewRequest(http.MethodOptions, "/api/v1/raw-sync/tokens", nil)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodOptions, "/api/v1/raw-sync/tokens", nil)
 	req.Host = "127.0.0.1:8080"
 	req.RemoteAddr = "192.0.2.10:54321"
 	req.Header.Set("Origin", "https://client.example")
@@ -600,6 +614,8 @@ func TestRawSyncAuthenticationUsesWriteTimeout(t *testing.T) {
 }
 
 func TestRawSyncAuthenticationAndHandlerShareWriteDeadline(t *testing.T) {
+	require := require.New(t)
+
 	t.Parallel()
 
 	type observedDeadline struct {
@@ -645,11 +661,11 @@ func TestRawSyncAuthenticationAndHandlerShareWriteDeadline(t *testing.T) {
 		"avdt_negotiate", "",
 	)
 
-	require.Equal(t, http.StatusOK, recorder.Code, recorder.Body.String())
+	require.Equal(http.StatusOK, recorder.Code, recorder.Body.String())
 	authDeadline := <-authDeadlines
 	custodyDeadline := <-custodyDeadlines
-	require.True(t, authDeadline.ok)
-	require.True(t, custodyDeadline.ok)
+	require.True(authDeadline.ok)
+	require.True(custodyDeadline.ok)
 	assert.Equal(t, authDeadline.deadline, custodyDeadline.deadline)
 }
 
@@ -678,7 +694,7 @@ func serveRawSyncJSON(
 	deviceID string,
 ) *httptest.ResponseRecorder {
 	t.Helper()
-	req := httptest.NewRequest(method, path, strings.NewReader(body))
+	req := httptest.NewRequestWithContext(t.Context(), method, path, strings.NewReader(body))
 	req.Host = "127.0.0.1:8080"
 	req.RemoteAddr = "192.0.2.10:54321"
 	req.Header.Set("Content-Type", "application/json")

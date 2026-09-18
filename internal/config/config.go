@@ -332,10 +332,10 @@ func (c VectorConfig) Validate() error {
 		return nil
 	}
 	if c.Embeddings.Model == "" {
-		return fmt.Errorf("[vector.embeddings] model is required when [vector] is enabled")
+		return errors.New("[vector.embeddings] model is required when [vector] is enabled")
 	}
 	if c.Embeddings.Dimension <= 0 {
-		return fmt.Errorf("[vector.embeddings] dimension must be greater than 0 when [vector] is enabled")
+		return errors.New("[vector.embeddings] dimension must be greater than 0 when [vector] is enabled")
 	}
 	if c.Embeddings.MaxInputChars <= 0 {
 		return fmt.Errorf(
@@ -355,9 +355,8 @@ func (c VectorConfig) Validate() error {
 		return fmt.Errorf("[vector.embed] invalid backstop_interval %q: %w", c.Embed.BackstopInterval, err)
 	}
 	if backstop == 0 {
-		return fmt.Errorf(
-			"[vector.embed] backstop_interval must not be zero; " +
-				"use a negative value to disable or omit for the 24h default")
+		return errors.New("[vector.embed] backstop_interval must not be zero; " +
+			"use a negative value to disable or omit for the 24h default")
 	}
 	return nil
 }
@@ -383,9 +382,8 @@ func (c VectorEmbeddingsServerConfig) APIKey() string {
 // unambiguous default, and per-server transport settings that parse.
 func (c VectorEmbeddingsConfig) validateServers() error {
 	if len(c.Servers) == 0 {
-		return fmt.Errorf(
-			"[vector.embeddings] at least one server is required when [vector] is enabled; " +
-				"define one under [vector.embeddings.servers.<name>]")
+		return errors.New("[vector.embeddings] at least one server is required when [vector] is enabled; " +
+			"define one under [vector.embeddings.servers.<name>]")
 	}
 	if c.DefaultServer == "" && len(c.Servers) > 1 {
 		return fmt.Errorf(
@@ -512,7 +510,7 @@ func (c InsightsConfig) Validate() error {
 		return nil
 	}
 	if endpoint == "" || model == "" {
-		return fmt.Errorf("[insights] endpoint and model are required together")
+		return errors.New("[insights] endpoint and model are required together")
 	}
 	u, err := url.Parse(endpoint)
 	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
@@ -996,7 +994,7 @@ func (c Config) ValidateRemoteHosts() error {
 func validateRemoteHTTPURL(raw string) error {
 	value := strings.TrimSpace(raw)
 	if value == "" {
-		return fmt.Errorf("url is required")
+		return errors.New("url is required")
 	}
 	u, err := url.Parse(value)
 	if err != nil {
@@ -1004,19 +1002,19 @@ func validateRemoteHTTPURL(raw string) error {
 	}
 	scheme := strings.ToLower(u.Scheme)
 	if scheme != "http" && scheme != "https" {
-		return fmt.Errorf("url must use http or https")
+		return errors.New("url must use http or https")
 	}
 	if u.Hostname() == "" {
-		return fmt.Errorf("url must include a host")
+		return errors.New("url must include a host")
 	}
 	if u.User != nil {
-		return fmt.Errorf("url must not include userinfo")
+		return errors.New("url must not include userinfo")
 	}
 	if u.RawQuery != "" || u.ForceQuery {
-		return fmt.Errorf("url must not include query")
+		return errors.New("url must not include query")
 	}
 	if u.Fragment != "" || u.RawFragment != "" || strings.Contains(value, "#") {
-		return fmt.Errorf("url must not include fragment")
+		return errors.New("url must not include fragment")
 	}
 	return nil
 }
@@ -1039,7 +1037,7 @@ func Default() (Config, error) {
 		return Config{}, fmt.Errorf("identify local sync machine: %w", err)
 	}
 	if strings.TrimSpace(hostname) == "" {
-		return Config{}, fmt.Errorf("identify local sync machine: hostname is empty")
+		return Config{}, errors.New("identify local sync machine: hostname is empty")
 	}
 
 	agentDirs := make(map[parser.AgentType][]string)
@@ -1557,7 +1555,7 @@ func (c *Config) applyConfigTOML(data string) error {
 	if file.LocalMachineName != nil {
 		name := strings.TrimSpace(*file.LocalMachineName)
 		if name == "" {
-			return fmt.Errorf("local_machine_name must be non-empty")
+			return errors.New("local_machine_name must be non-empty")
 		}
 		c.LocalMachineName = name
 	}
@@ -2290,7 +2288,7 @@ func finalize(cfg *Config) error {
 		return err
 	}
 	if strings.TrimSpace(cfg.LocalMachineName) == "" {
-		return fmt.Errorf("identify local sync machine: hostname is empty")
+		return errors.New("identify local sync machine: hostname is empty")
 	}
 	if err := cfg.resolveSessionSources(); err != nil {
 		return err
@@ -2552,7 +2550,7 @@ func normalizeRuntimeSessionRoot(agent parser.AgentType, raw string) (dir, metad
 func normalizeAgentHomeDir(raw string) (string, error) {
 	value := strings.TrimSpace(raw)
 	if value == "" {
-		return "", fmt.Errorf("home is required")
+		return "", errors.New("home is required")
 	}
 	if strings.HasPrefix(strings.ToLower(value), "s3://") {
 		return "", fmt.Errorf("home %q is an S3 root; homes must be local directories, so configure S3 through the per-agent directory setting", raw)
@@ -2563,7 +2561,7 @@ func normalizeAgentHomeDir(raw string) (string, error) {
 func normalizeSessionSourceDir(raw string) (string, error) {
 	value := strings.TrimSpace(raw)
 	if value == "" {
-		return "", fmt.Errorf("dir is required")
+		return "", errors.New("dir is required")
 	}
 	if strings.ContainsRune(value, '\x00') {
 		return "", fmt.Errorf("dir %q contains a NUL byte", raw)
@@ -2850,7 +2848,7 @@ func parsePGConfigSection(value any) (PGConfig, map[string]PGConfig, error) {
 	}
 	section, ok := value.(map[string]any)
 	if !ok {
-		return PGConfig{}, nil, fmt.Errorf("expected [pg] to be a table")
+		return PGConfig{}, nil, errors.New("expected [pg] to be a table")
 	}
 	hasLegacyFields := false
 	hasNamedTargets := false
@@ -2879,9 +2877,7 @@ func parsePGConfigSection(value any) (PGConfig, map[string]PGConfig, error) {
 		}
 		hasNamedTargets = true
 		if name == "" {
-			return PGConfig{}, nil, fmt.Errorf(
-				"named PG targets must not be blank",
-			)
+			return PGConfig{}, nil, errors.New("named PG targets must not be blank")
 		}
 		if isReservedPGTargetName(name) {
 			return PGConfig{}, nil, fmt.Errorf(
@@ -2905,9 +2901,7 @@ func parsePGConfigSection(value any) (PGConfig, map[string]PGConfig, error) {
 		namedTargets[name] = targetCfg
 	}
 	if hasLegacyFields && hasNamedTargets {
-		return PGConfig{}, nil, fmt.Errorf(
-			"cannot mix legacy [pg] fields with named [pg.NAME] targets",
-		)
+		return PGConfig{}, nil, errors.New("cannot mix legacy [pg] fields with named [pg.NAME] targets")
 	}
 	if hasLegacyFields {
 		legacyCfg, err := decodePGConfigMap(legacyRaw)
@@ -2992,9 +2986,7 @@ func defaultAgentsviewDBDir(dbPath string) bool {
 func (c *Config) DefaultPGTargetName() (string, error) {
 	if len(c.PGTargets) == 0 {
 		if c.DefaultPG != "" {
-			return "", fmt.Errorf(
-				"default_pg requires named [pg.NAME] targets",
-			)
+			return "", errors.New("default_pg requires named [pg.NAME] targets")
 		}
 		return "", nil
 	}
@@ -3012,9 +3004,7 @@ func (c *Config) DefaultPGTargetName() (string, error) {
 			return name, nil
 		}
 	}
-	return "", fmt.Errorf(
-		"default_pg is required when more than one [pg.NAME] target is defined",
-	)
+	return "", errors.New("default_pg is required when more than one [pg.NAME] target is defined")
 }
 
 func (c *Config) validatePGTargets() error {
@@ -3325,7 +3315,7 @@ func (c *Config) SaveSettings(patch map[string]any) error {
 	if value, ok := patch["tool_result_images"]; ok {
 		policy, ok := value.(ToolResultImages)
 		if !ok {
-			return fmt.Errorf("tool_result_images must use the typed configuration value")
+			return errors.New("tool_result_images must use the typed configuration value")
 		}
 		if _, err := ParseToolResultImages(string(policy)); err != nil {
 			return err
@@ -3334,7 +3324,7 @@ func (c *Config) SaveSettings(patch map[string]any) error {
 	if value, ok := patch["chart_palette"]; ok {
 		palette, ok := value.(ChartPalette)
 		if !ok {
-			return fmt.Errorf("chart_palette must use the typed configuration value")
+			return errors.New("chart_palette must use the typed configuration value")
 		}
 		if _, err := ParseChartPalette(string(palette)); err != nil {
 			return err
@@ -3343,7 +3333,7 @@ func (c *Config) SaveSettings(patch map[string]any) error {
 	if value, ok := patch["zoom_level"]; ok {
 		zoom, ok := value.(ZoomLevel)
 		if !ok {
-			return fmt.Errorf("zoom_level must use the typed configuration value")
+			return errors.New("zoom_level must use the typed configuration value")
 		}
 		if err := zoom.Validate(); err != nil {
 			return err
@@ -3352,9 +3342,7 @@ func (c *Config) SaveSettings(patch map[string]any) error {
 	if value, ok := patch["disabled_agents"]; ok {
 		agents, ok := value.([]parser.AgentType)
 		if !ok {
-			return fmt.Errorf(
-				"disabled_agents must use typed session provider values",
-			)
+			return errors.New("disabled_agents must use typed session provider values")
 		}
 		raw := make([]string, len(agents))
 		for i, agent := range agents {
@@ -3370,9 +3358,7 @@ func (c *Config) SaveSettings(patch map[string]any) error {
 	if value, ok := patch["agent_homes"]; ok {
 		homes, ok := value.(map[parser.AgentType][]string)
 		if !ok {
-			return fmt.Errorf(
-				"agent_homes must use typed session provider values",
-			)
+			return errors.New("agent_homes must use typed session provider values")
 		}
 		raw := make(map[string][]string, len(homes))
 		for agent, dirs := range homes {

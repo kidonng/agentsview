@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"context"
 	"crypto/sha256"
 	"encoding/json/jsontext"
 	"encoding/json/v2"
@@ -37,6 +36,9 @@ const (
 )
 
 func TestExportHourMatchesExactCanonicalDayElement(t *testing.T) {
+	assert := assert.New(t)
+	require := require.New(t)
+
 	seedExportReportingArchive(t)
 	now := time.Date(2026, 7, 29, 14, 37, 0, 0, time.UTC)
 	root := newExportReportingTestRoot(now)
@@ -44,27 +46,30 @@ func TestExportHourMatchesExactCanonicalDayElement(t *testing.T) {
 	dayOut, stderr, err := executeExportSessionsCommand(
 		root, "export", "day", "2026-07-28",
 	)
-	require.NoError(t, err)
-	assert.Empty(t, stderr)
+	require.NoError(err)
+	assert.Empty(stderr)
 	var day export.ReportingDay
-	require.NoError(t, json.Unmarshal([]byte(dayOut), &day))
+	require.NoError(json.Unmarshal([]byte(dayOut), &day))
 
 	hourOut, stderr, err := executeExportSessionsCommand(
 		newExportReportingTestRoot(now),
 		"export", "hour", "2026-07-28-10",
 	)
-	require.NoError(t, err)
-	assert.Empty(t, stderr)
+	require.NoError(err)
+	assert.Empty(stderr)
 	var hour export.ReportingHour
-	require.NoError(t, json.Unmarshal([]byte(hourOut), &hour))
+	require.NoError(json.Unmarshal([]byte(hourOut), &hour))
 
-	require.Equal(t, day.Hours[10], hour)
+	require.Equal(day.Hours[10], hour)
 	canonical, err := export.MarshalCanonical(day.Hours[10])
-	require.NoError(t, err)
-	assert.Equal(t, string(canonical)+"\n", hourOut)
+	require.NoError(err)
+	assert.Equal(string(canonical)+"\n", hourOut)
 }
 
 func TestExportDayCurrentDateContainsOnlyClosedHours(t *testing.T) {
+	assert := assert.New(t)
+	require := require.New(t)
+
 	seedExportReportingArchive(t)
 	now := time.Date(2026, 7, 29, 14, 37, 0, 0, time.UTC)
 
@@ -72,14 +77,14 @@ func TestExportDayCurrentDateContainsOnlyClosedHours(t *testing.T) {
 		newExportReportingTestRoot(now),
 		"export", "day", "2026-07-29",
 	)
-	require.NoError(t, err)
-	assert.Empty(t, stderr)
+	require.NoError(err)
+	assert.Empty(stderr)
 	var day export.ReportingDay
-	require.NoError(t, json.Unmarshal([]byte(stdout), &day))
-	assert.False(t, day.Complete)
-	assert.Empty(t, day.Digest)
-	require.Len(t, day.Hours, 14)
-	assert.Equal(t, "2026-07-29-13", day.Hours[13].Period)
+	require.NoError(json.Unmarshal([]byte(stdout), &day))
+	assert.False(day.Complete)
+	assert.Empty(day.Digest)
+	require.Len(day.Hours, 14)
+	assert.Equal("2026-07-29-13", day.Hours[13].Period)
 }
 
 func TestExportHourRejectsOpenAndMalformedPeriods(t *testing.T) {
@@ -105,6 +110,9 @@ func TestExportHourRejectsOpenAndMalformedPeriods(t *testing.T) {
 }
 
 func TestExportDigestReturnsOrderedMultiDateRange(t *testing.T) {
+	assert := assert.New(t)
+	require := require.New(t)
+
 	seedExportReportingArchive(t)
 	now := time.Date(2026, 7, 29, 14, 37, 0, 0, time.UTC)
 
@@ -114,25 +122,27 @@ func TestExportDigestReturnsOrderedMultiDateRange(t *testing.T) {
 		"--from", "2026-07-27",
 		"--to", "2026-07-29",
 	)
-	require.NoError(t, err)
-	assert.Empty(t, stderr)
+	require.NoError(err)
+	assert.Empty(stderr)
 	var digest export.ReportingDigest
-	require.NoError(t, json.Unmarshal([]byte(stdout), &digest))
-	assert.Equal(t, export.ReportingSchemaVersion, digest.SchemaVersion)
-	assert.Equal(t, "2026-07-27", digest.From)
-	assert.Equal(t, "2026-07-29", digest.To)
-	require.Len(t, digest.Days, 3)
-	assert.Equal(t, "2026-07-27", digest.Days[0].Date)
-	assert.True(t, digest.Days[0].Complete)
-	assert.NotEmpty(t, digest.Days[0].DayDigest)
-	assert.Len(t, digest.Days[0].HourDigests, 24)
-	assert.Equal(t, "2026-07-29", digest.Days[2].Date)
-	assert.False(t, digest.Days[2].Complete)
-	assert.Empty(t, digest.Days[2].DayDigest)
-	assert.Len(t, digest.Days[2].HourDigests, 14)
+	require.NoError(json.Unmarshal([]byte(stdout), &digest))
+	assert.Equal(export.ReportingSchemaVersion, digest.SchemaVersion)
+	assert.Equal("2026-07-27", digest.From)
+	assert.Equal("2026-07-29", digest.To)
+	require.Len(digest.Days, 3)
+	assert.Equal("2026-07-27", digest.Days[0].Date)
+	assert.True(digest.Days[0].Complete)
+	assert.NotEmpty(digest.Days[0].DayDigest)
+	assert.Len(digest.Days[0].HourDigests, 24)
+	assert.Equal("2026-07-29", digest.Days[2].Date)
+	assert.False(digest.Days[2].Complete)
+	assert.Empty(digest.Days[2].DayDigest)
+	assert.Len(digest.Days[2].HourDigests, 14)
 }
 
 func TestExportDigestRejectsReversedRange(t *testing.T) {
+	assert := assert.New(t)
+
 	seedExportReportingArchive(t)
 
 	stdout, stderr, err := executeExportSessionsCommand(
@@ -144,9 +154,9 @@ func TestExportDigestRejectsReversedRange(t *testing.T) {
 		"--to", "2026-07-28",
 	)
 	require.Error(t, err)
-	assert.Empty(t, stdout)
-	assert.Empty(t, stderr)
-	assert.Contains(t, err.Error(), "--from must not be after --to")
+	assert.Empty(stdout)
+	assert.Empty(stderr)
+	assert.Contains(err.Error(), "--from must not be after --to")
 }
 
 func TestExportReportingSchemaVersions(t *testing.T) {
@@ -176,21 +186,24 @@ func TestExportReportingSchemaVersions(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			assert := assert.New(t)
+			require := require.New(t)
+
 			defaultOut, defaultErrOut, err := executeExportSessionsCommand(
 				newExportReportingTestRoot(now), tt.common...,
 			)
-			require.NoError(t, err)
-			assert.Empty(t, defaultErrOut)
+			require.NoError(err)
+			assert.Empty(defaultErrOut)
 
 			currentArgs := append([]string(nil), tt.common...)
 			currentArgs = append(currentArgs, "--schema-version", "3")
 			currentOut, currentErrOut, err := executeExportSessionsCommand(
 				newExportReportingTestRoot(now), currentArgs...,
 			)
-			require.NoError(t, err)
-			assert.Empty(t, currentErrOut)
-			assert.Equal(t, defaultOut, currentOut)
-			assert.Contains(t, currentOut, `"schema_version":3`)
+			require.NoError(err)
+			assert.Empty(currentErrOut)
+			assert.Equal(defaultOut, currentOut)
+			assert.Contains(currentOut, `"schema_version":3`)
 		})
 	}
 }
@@ -204,6 +217,8 @@ func TestExportReportingSchemaVersionRejectsBeforeOpen(t *testing.T) {
 	} {
 		for _, version := range []int{1, 2, 99} {
 			t.Run(args[1]+"/"+strconv.Itoa(version), func(t *testing.T) {
+				assert := assert.New(t)
+
 				opened := false
 				deps := exportReportingDeps{
 					now: func() time.Time { return now },
@@ -217,15 +232,17 @@ func TestExportReportingSchemaVersionRejectsBeforeOpen(t *testing.T) {
 					newExportReportingTestRootWithDeps(deps), versionArgs...,
 				)
 				require.EqualError(t, err, fmt.Sprintf("unsupported reporting schema version %d", version))
-				assert.False(t, opened)
-				assert.Empty(t, stdout)
-				assert.Empty(t, stderr)
+				assert.False(opened)
+				assert.Empty(stdout)
+				assert.Empty(stderr)
 			})
 		}
 	}
 }
 
 func TestExportReportingRequiresExistingArchiveWithoutCreatingOne(t *testing.T) {
+	assert := assert.New(t)
+
 	dataDir := testDataDir(t)
 	dbPath := filepath.Join(dataDir, "sessions.db")
 
@@ -236,15 +253,18 @@ func TestExportReportingRequiresExistingArchiveWithoutCreatingOne(t *testing.T) 
 		"export", "day", "2026-07-28",
 	)
 	require.Error(t, err)
-	assert.Empty(t, stdout)
-	assert.Empty(t, stderr)
-	assert.NoFileExists(t, dbPath)
+	assert.Empty(stdout)
+	assert.Empty(stderr)
+	assert.NoFileExists(dbPath)
 }
 
 func TestExportReportingRunsWhileWriteOwnerLockHeld(t *testing.T) {
+	assert := assert.New(t)
+	require := require.New(t)
+
 	dataDir := testDataDir(t)
 	database := dbtest.OpenTestDBAt(t, filepath.Join(dataDir, "sessions.db"))
-	require.NoError(t, database.Close())
+	require.NoError(database.Close())
 	holdWriteOwnerLockForTest(t, dataDir)
 
 	stdout, stderr, err := executeExportSessionsCommand(
@@ -253,16 +273,19 @@ func TestExportReportingRunsWhileWriteOwnerLockHeld(t *testing.T) {
 		),
 		"export", "day", "2026-07-28",
 	)
-	require.NoError(t, err)
-	assert.NotEmpty(t, stdout)
-	assert.Empty(t, stderr)
+	require.NoError(err)
+	assert.NotEmpty(stdout)
+	assert.Empty(stderr)
 }
 
 func TestExportReportingFallbackPricingOnUnseededArchive(t *testing.T) {
+	assert := assert.New(t)
+	require := require.New(t)
+
 	dataDir := testDataDir(t)
 	database := dbtest.OpenTestDBAt(t, filepath.Join(dataDir, "sessions.db"))
 	model := exactFallbackPricedModel(t)
-	require.NoError(t, database.UpsertSession(db.Session{
+	require.NoError(database.UpsertSession(db.Session{
 		ID:               "fixture-fallback-priced",
 		Machine:          "fixture-machine",
 		Agent:            "agent fallback",
@@ -271,7 +294,7 @@ func TestExportReportingFallbackPricingOnUnseededArchive(t *testing.T) {
 		MessageCount:     2,
 		UserMessageCount: 1,
 	}))
-	require.NoError(t, database.InsertMessages([]db.Message{
+	require.NoError(database.InsertMessages([]db.Message{
 		{
 			SessionID:     "fixture-fallback-priced",
 			Ordinal:       0,
@@ -293,10 +316,10 @@ func TestExportReportingFallbackPricingOnUnseededArchive(t *testing.T) {
 			),
 		},
 	}))
-	seeded, err := database.HasModelPricingRows(context.Background())
-	require.NoError(t, err)
-	assert.False(t, seeded)
-	require.NoError(t, database.Close())
+	seeded, err := database.HasModelPricingRows(t.Context())
+	require.NoError(err)
+	assert.False(seeded)
+	require.NoError(database.Close())
 
 	stdout, stderr, err := executeExportSessionsCommand(
 		newExportReportingTestRoot(
@@ -304,25 +327,28 @@ func TestExportReportingFallbackPricingOnUnseededArchive(t *testing.T) {
 		),
 		"export", "hour", "2026-07-28-10",
 	)
-	require.NoError(t, err)
-	assert.Empty(t, stderr)
+	require.NoError(err)
+	assert.Empty(stderr)
 
 	var hour export.ReportingHour
-	require.NoError(t, json.Unmarshal([]byte(stdout), &hour))
-	assert.Positive(t, hour.Usage.Totals.Cost.Microdollars)
-	assert.Positive(t, hour.Activity.Totals.Cost.Microdollars)
+	require.NoError(json.Unmarshal([]byte(stdout), &hour))
+	assert.Positive(hour.Usage.Totals.Cost.Microdollars)
+	assert.Positive(hour.Activity.Totals.Cost.Microdollars)
 }
 
 func TestExportReportingSnapshotStoredPricingOverridesInstalledFallback(
 	t *testing.T,
 ) {
+	assert := assert.New(t)
+	require := require.New(t)
+
 	dataDir := testDataDir(t)
 	database := dbtest.OpenTestDBAt(t, filepath.Join(dataDir, "sessions.db"))
 	t.Cleanup(func() {
-		require.NoError(t, database.Close())
+		require.NoError(database.Close())
 	})
 	model := exactFallbackPricedModel(t)
-	require.NoError(t, database.UpsertSession(db.Session{
+	require.NoError(database.UpsertSession(db.Session{
 		ID:               "fixture-snapshot-pricing",
 		Machine:          "fixture-machine",
 		Agent:            "agent snapshot",
@@ -331,7 +357,7 @@ func TestExportReportingSnapshotStoredPricingOverridesInstalledFallback(
 		MessageCount:     2,
 		UserMessageCount: 1,
 	}))
-	require.NoError(t, database.InsertMessages([]db.Message{
+	require.NoError(database.InsertMessages([]db.Message{
 		{
 			SessionID:     "fixture-snapshot-pricing",
 			Ordinal:       0,
@@ -381,17 +407,16 @@ func TestExportReportingSnapshotStoredPricingOverridesInstalledFallback(
 		newExportReportingTestRootWithDeps(deps),
 		"export", "hour", "2026-07-28-10",
 	)
-	require.NoError(t, err)
-	assert.Empty(t, stderr)
+	require.NoError(err)
+	assert.Empty(stderr)
 
 	var hour export.ReportingHour
-	require.NoError(t, json.Unmarshal([]byte(stdout), &hour))
+	require.NoError(json.Unmarshal([]byte(stdout), &hour))
 	assert.Equal(
-		t,
 		money.Money{Microdollars: 351_000},
 		hour.Usage.Totals.Cost,
 	)
-	assert.Equal(t, hour.Usage.Totals.Cost, hour.Activity.Totals.Cost)
+	assert.Equal(hour.Usage.Totals.Cost, hour.Activity.Totals.Cost)
 }
 
 func newExportReportingTestRoot(now time.Time) *cobra.Command {
@@ -421,21 +446,24 @@ func seedExportReportingArchive(t *testing.T) {
 }
 
 func TestExportReportingGolden(t *testing.T) {
+	assert := assert.New(t)
+	require := require.New(t)
+
 	got, emptyDay := buildExportReportingGoldenDocuments(t)
 	repeated, repeatedEmptyDay := buildExportReportingGoldenDocuments(t)
-	require.Equal(t, got, repeated, "independent fixture seeds must be byte-identical")
-	require.Equal(t, emptyDay, repeatedEmptyDay)
+	require.Equal(got, repeated, "independent fixture seeds must be byte-identical")
+	require.Equal(emptyDay, repeatedEmptyDay)
 
 	base := filepath.Join("testdata", "reporting")
 	manifest := reportingGoldenManifest(got)
 	if *updateGolden {
-		require.NoError(t, os.MkdirAll(base, 0o755))
+		require.NoError(os.MkdirAll(base, 0o755))
 		for name, contents := range got {
-			require.NoError(t, os.WriteFile(
+			require.NoError(os.WriteFile(
 				filepath.Join(base, name), contents, 0o644,
 			))
 		}
-		require.NoError(t, os.WriteFile(
+		require.NoError(os.WriteFile(
 			filepath.Join(base, "manifest.sha256"), manifest, 0o644,
 		))
 		t.Logf("rewrote reporting goldens under %s", base)
@@ -443,43 +471,42 @@ func TestExportReportingGolden(t *testing.T) {
 		for name, contents := range got {
 			want, err := os.ReadFile(filepath.Join(base, name))
 			require.NoError(
-				t, err, "read %s (run with -update to generate)", name,
+				err, "read %s (run with -update to generate)", name,
 			)
-			assert.Equal(t, string(want), string(contents), name)
+			assert.Equal(string(want), string(contents), name)
 		}
 		wantManifest, err := os.ReadFile(filepath.Join(base, "manifest.sha256"))
-		require.NoError(t, err, "read reporting manifest")
-		assert.Equal(t, string(wantManifest), string(manifest))
+		require.NoError(err, "read reporting manifest")
+		assert.Equal(string(wantManifest), string(manifest))
 	}
 
 	var hour export.ReportingHour
-	require.NoError(t, json.Unmarshal(got["hour-v3.json"], &hour))
+	require.NoError(json.Unmarshal(got["hour-v3.json"], &hour))
 	finalHour, canonicalHour, err := export.FinalizeReportingHour(hour)
-	require.NoError(t, err)
-	assert.Equal(t, hour, finalHour)
-	assert.Equal(t, string(canonicalHour)+"\n", string(got["hour-v3.json"]))
+	require.NoError(err)
+	assert.Equal(hour, finalHour)
+	assert.Equal(string(canonicalHour)+"\n", string(got["hour-v3.json"]))
 
 	var day export.ReportingDay
-	require.NoError(t, json.Unmarshal(got["day-v3.json"], &day))
+	require.NoError(json.Unmarshal(got["day-v3.json"], &day))
 	finalDay, canonicalDay, err := export.FinalizeReportingDay(day)
-	require.NoError(t, err)
-	assert.Equal(t, day, finalDay)
-	assert.Equal(t, string(canonicalDay)+"\n", string(got["day-v3.json"]))
-	require.Equal(t, day.Hours[11], hour)
-	assert.InDelta(t, 2, day.Hours[10].Activity.Totals.AgentMinutes, 0.0001)
-	assert.InDelta(t, 3, hour.Activity.Totals.AgentMinutes, 0.0001)
-	require.Len(t, hour.Usage.ByModel, 3)
-	assert.Equal(t, reportingGoldenLatestModel, hour.Usage.ByModel[0].Key)
-	assert.Equal(t, int64(71_000), hour.Usage.Totals.Cost.Microdollars)
-	assert.Equal(t, int64(62_000), hour.Activity.Totals.Cost.Microdollars)
-	assert.Equal(t, reportingGoldenStandalone, hour.Usage.ByModel[1].Key)
-	assert.Equal(t, reportingGoldenUsageOnly, hour.Usage.ByModel[2].Key)
-	require.Len(t, hour.Usage.ByAgent, 3)
-	assert.Equal(t, reportingGoldenUsageAgent, hour.Usage.ByAgent[1].Key)
-	assert.Equal(t, "cursor", hour.Usage.ByAgent[2].Key)
-	require.Len(t, hour.Usage.ByProject, 2)
+	require.NoError(err)
+	assert.Equal(day, finalDay)
+	assert.Equal(string(canonicalDay)+"\n", string(got["day-v3.json"]))
+	require.Equal(day.Hours[11], hour)
+	assert.InDelta(2, day.Hours[10].Activity.Totals.AgentMinutes, 0.0001)
+	assert.InDelta(3, hour.Activity.Totals.AgentMinutes, 0.0001)
+	require.Len(hour.Usage.ByModel, 3)
+	assert.Equal(reportingGoldenLatestModel, hour.Usage.ByModel[0].Key)
+	assert.Equal(int64(71_000), hour.Usage.Totals.Cost.Microdollars)
+	assert.Equal(int64(62_000), hour.Activity.Totals.Cost.Microdollars)
+	assert.Equal(reportingGoldenStandalone, hour.Usage.ByModel[1].Key)
+	assert.Equal(reportingGoldenUsageOnly, hour.Usage.ByModel[2].Key)
+	require.Len(hour.Usage.ByAgent, 3)
+	assert.Equal(reportingGoldenUsageAgent, hour.Usage.ByAgent[1].Key)
+	assert.Equal("cursor", hour.Usage.ByAgent[2].Key)
+	require.Len(hour.Usage.ByProject, 2)
 	assert.ElementsMatch(
-		t,
 		[]string{reportingGoldenProject, reportingGoldenUsageProject},
 		[]string{
 			hour.Usage.ByProject[0].Project,
@@ -487,31 +514,30 @@ func TestExportReportingGolden(t *testing.T) {
 		},
 	)
 	assert.Greater(
-		t,
 		hour.Usage.Totals.Cost.Microdollars,
 		hour.Activity.Totals.Cost.Microdollars,
 	)
-	require.Len(t, hour.Activity.ByAgent, 1)
-	assert.Equal(t, reportingGoldenAgent, hour.Activity.ByAgent[0].Key)
-	require.Len(t, hour.Activity.ByProject, 1)
-	assert.Equal(t, reportingGoldenProject, hour.Activity.ByProject[0].Project)
-	assert.Equal(t, 2, hour.Activity.Totals.NewModels)
+	require.Len(hour.Activity.ByAgent, 1)
+	assert.Equal(reportingGoldenAgent, hour.Activity.ByAgent[0].Key)
+	require.Len(hour.Activity.ByProject, 1)
+	assert.Equal(reportingGoldenProject, hour.Activity.ByProject[0].Project)
+	assert.Equal(2, hour.Activity.Totals.NewModels)
 	quiet := day.Hours[12]
-	assert.False(t, quiet.HasData)
-	assert.Zero(t, quiet.Activity.Totals.IdleMinutes)
-	assert.Len(t, quiet.Activity.Buckets, 12)
-	assert.Empty(t, quiet.Activity.ByModel)
-	assert.Empty(t, quiet.Activity.ByAgent)
-	assert.Empty(t, quiet.Activity.ByProject)
-	assert.Empty(t, quiet.Usage.ByModel)
+	assert.False(quiet.HasData)
+	assert.Zero(quiet.Activity.Totals.IdleMinutes)
+	assert.Len(quiet.Activity.Buckets, 12)
+	assert.Empty(quiet.Activity.ByModel)
+	assert.Empty(quiet.Activity.ByAgent)
+	assert.Empty(quiet.Activity.ByProject)
+	assert.Empty(quiet.Usage.ByModel)
 
 	var digest export.ReportingDigest
-	require.NoError(t, json.Unmarshal(got["digest-v3.json"], &digest))
-	require.Len(t, digest.Days, 2)
+	require.NoError(json.Unmarshal(got["digest-v3.json"], &digest))
+	require.Len(digest.Days, 2)
 	assertDigestDayMatchesReportingDay(t, digest.Days[1], day)
 	var empty export.ReportingDay
-	require.NoError(t, json.Unmarshal(emptyDay, &empty))
-	assert.False(t, empty.HasData)
+	require.NoError(json.Unmarshal(emptyDay, &empty))
+	assert.False(empty.HasData)
 	assertDigestDayMatchesReportingDay(t, digest.Days[0], empty)
 }
 
@@ -542,7 +568,7 @@ func seedExportReportingGoldenArchive(t *testing.T) {
 	dataDir := testDataDir(t)
 	database := dbtest.OpenTestDBAt(t, filepath.Join(dataDir, "sessions.db"))
 	require.NoError(t, database.SetArchiveIdentityForTest(
-		context.Background(),
+		t.Context(),
 		"reporting-fixture-archive",
 		"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
 	))
@@ -559,7 +585,7 @@ func seedExportReportingGoldenArchive(t *testing.T) {
 		},
 	}))
 	require.NoError(t, database.UpsertProjectIdentityObservation(
-		context.Background(),
+		t.Context(),
 		export.ProjectIdentityObservation{
 			SessionID: "fixture-cross",
 			Project:   reportingGoldenProject,

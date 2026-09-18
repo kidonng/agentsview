@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json/jsontext"
 	"encoding/json/v2"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -205,6 +206,8 @@ func TestInsightExportHTML(t *testing.T) {
 }
 
 func TestInsightMarkdownExport(t *testing.T) {
+	assert := assert.New(t)
+
 	te := setup(t)
 	content := "# Insight\n\n- stored markdown"
 	id := te.seedInsight(t, "daily_activity", "2025-01-15", new("my-app"),
@@ -215,14 +218,16 @@ func TestInsightMarkdownExport(t *testing.T) {
 
 	w := te.get(t, fmt.Sprintf("/api/v1/insights/%d/md", id))
 	assertStatus(t, w, http.StatusOK)
-	assert.Contains(t, w.Header().Get("Content-Type"), "text/markdown")
-	assert.Contains(t, w.Header().Get("Content-Disposition"), "inline")
-	assert.Contains(t, w.Header().Get("Content-Disposition"), ".md")
-	assert.Equal(t, content, w.Body.String())
+	assert.Contains(w.Header().Get("Content-Type"), "text/markdown")
+	assert.Contains(w.Header().Get("Content-Disposition"), "inline")
+	assert.Contains(w.Header().Get("Content-Disposition"), ".md")
+	assert.Equal(content, w.Body.String())
 }
 
 func TestInsightPublish(t *testing.T) {
 	t.Run("Success", func(t *testing.T) {
+		assert := assert.New(t)
+
 		te := setup(t)
 		te.srv.SetGithubToken("fake-token")
 		id := te.seedInsight(t, "daily_activity", "2025-01-15", new("my-app"),
@@ -247,15 +252,13 @@ func TestInsightPublish(t *testing.T) {
 			body, err := io.ReadAll(req.Body)
 			require.NoError(t, err)
 			require.NoError(t, json.Unmarshal(body, &payload))
-			assert.Equal(t, "Insight: Daily Activity - my-app - 2025-01-15", payload.Description)
-			assert.False(t, payload.Public)
+			assert.Equal("Insight: Daily Activity - my-app - 2025-01-15", payload.Description)
+			assert.False(payload.Public)
 			require.Contains(t, payload.Files, "insight-daily_activity-my-app-20250115.html")
-			assert.Contains(t,
-				payload.Files["insight-daily_activity-my-app-20250115.html"].Content,
+			assert.Contains(payload.Files["insight-daily_activity-my-app-20250115.html"].Content,
 				"Daily Activity Insight",
 			)
-			assert.Contains(t,
-				payload.Files["insight-daily_activity-my-app-20250115.html"].Content,
+			assert.Contains(payload.Files["insight-daily_activity-my-app-20250115.html"].Content,
 				"# Insight",
 			)
 
@@ -275,14 +278,12 @@ func TestInsightPublish(t *testing.T) {
 		assertStatus(t, w, http.StatusOK)
 
 		resp := decode[map[string]string](t, w)
-		assert.Equal(t, "gist123", resp["gist_id"])
-		assert.Equal(t, "https://gist.github.com/octocat/gist123", resp["gist_url"])
-		assert.Equal(t,
-			"https://gist.githubusercontent.com/octocat/gist123/raw/insight-daily_activity-my-app-20250115.html",
+		assert.Equal("gist123", resp["gist_id"])
+		assert.Equal("https://gist.github.com/octocat/gist123", resp["gist_url"])
+		assert.Equal("https://gist.githubusercontent.com/octocat/gist123/raw/insight-daily_activity-my-app-20250115.html",
 			resp["raw_url"],
 		)
-		assert.Equal(t,
-			"https://htmlpreview.github.io/?https://gist.githubusercontent.com/octocat/gist123/raw/insight-daily_activity-my-app-20250115.html",
+		assert.Equal("https://htmlpreview.github.io/?https://gist.githubusercontent.com/octocat/gist123/raw/insight-daily_activity-my-app-20250115.html",
 			resp["view_url"],
 		)
 	})
@@ -302,7 +303,7 @@ func TestInsightPublish(t *testing.T) {
 		te := setup(t)
 		id := te.seedInsight(t, "daily_activity", "2025-01-15", new("my-app"))
 
-		req := httptest.NewRequest(http.MethodPost,
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodPost,
 			fmt.Sprintf("/api/v1/insights/%d/publish", id),
 			strings.NewReader("{}"))
 		req.Header.Set("Content-Type", "application/json")
@@ -357,7 +358,7 @@ func TestGenerateInsight_DefaultAgent(t *testing.T) {
 		_ context.Context, agent, _ string,
 	) (insight.Result, error) {
 		assert.Equal(t, "claude", agent, "expected default agent claude")
-		return insight.Result{}, fmt.Errorf("stub: no CLI")
+		return insight.Result{}, errors.New("stub: no CLI")
 	}
 	te := setupWithServerOpts(t, []server.Option{
 		server.WithGenerateFunc(stubGen),
@@ -384,12 +385,15 @@ func TestGenerateInsight_SessionValidation(t *testing.T) {
 }
 
 func TestGenerateInsight_SingleSessionUsesSessionPrompt(t *testing.T) {
+	assert := assert.New(t)
+	require := require.New(t)
+
 	te := setupWithServerOpts(t, []server.Option{
 		server.WithGenerateFunc(func(
 			_ context.Context, agent, prompt string,
 		) (insight.Result, error) {
-			assert.Equal(t, "claude", agent)
-			assert.Contains(t, prompt, "## Session: session-1")
+			assert.Equal("claude", agent)
+			assert.Contains(prompt, "## Session: session-1")
 			return insight.Result{
 				Agent:   "claude",
 				Content: "single-session analysis",
@@ -403,14 +407,14 @@ func TestGenerateInsight_SingleSessionUsesSessionPrompt(t *testing.T) {
 	assertStatus(t, w, http.StatusOK)
 
 	events := parseSSE(w.Body.String())
-	require.NotEmpty(t, events)
-	require.Equal(t, "done", events[len(events)-1].Event)
+	require.NotEmpty(events)
+	require.Equal("done", events[len(events)-1].Event)
 
 	var saved db.Insight
-	require.NoError(t, json.Unmarshal([]byte(events[len(events)-1].Data), &saved))
-	assert.Equal(t, "2025-01-15", saved.DateFrom)
-	assert.Equal(t, "2025-01-15", saved.DateTo)
-	assert.Equal(t, "my-app", *saved.Project)
+	require.NoError(json.Unmarshal([]byte(events[len(events)-1].Data), &saved))
+	assert.Equal("2025-01-15", saved.DateFrom)
+	assert.Equal("2025-01-15", saved.DateTo)
+	assert.Equal("my-app", *saved.Project)
 }
 
 func TestGenerateInsight_SingleSessionMissingSession(t *testing.T) {
@@ -423,6 +427,9 @@ func TestGenerateInsight_SingleSessionMissingSession(t *testing.T) {
 }
 
 func TestGenerateInsight_PersistsWithReadOnlyStore(t *testing.T) {
+	assert := assert.New(t)
+	require := require.New(t)
+
 	dir := tempDirWithRetryCleanup(t)
 	dbPath := filepath.Join(dir, "test.db")
 	database := dbtest.OpenTestDBAt(t, dbPath)
@@ -438,7 +445,7 @@ func TestGenerateInsight_PersistsWithReadOnlyStore(t *testing.T) {
 	srv := server.New(cfg, store, nil, server.WithGenerateFunc(func(
 		_ context.Context, agent, _ string,
 	) (insight.Result, error) {
-		assert.Equal(t, "claude", agent)
+		assert.Equal("claude", agent)
 		return insight.Result{
 			Agent:   "claude",
 			Content: "persisted from read-only wrapper",
@@ -453,27 +460,27 @@ func TestGenerateInsight_PersistsWithReadOnlyStore(t *testing.T) {
 		dataDir:     dir,
 	}
 
-	assert.True(t, store.ReadOnly())
+	assert.True(store.ReadOnly())
 
 	w := te.post(t, "/api/v1/insights/generate",
 		`{"type":"daily_activity","date_from":"2025-01-15","date_to":"2025-01-15"}`)
 	assertStatus(t, w, http.StatusOK)
 
 	events := parseSSE(w.Body.String())
-	require.NotEmpty(t, events)
-	require.Equal(t, "done", events[len(events)-1].Event)
-	assert.Equal(t, 1, store.insertCalls)
+	require.NotEmpty(events)
+	require.Equal("done", events[len(events)-1].Event)
+	assert.Equal(1, store.insertCalls)
 
 	var saved db.Insight
-	require.NoError(t, json.Unmarshal([]byte(events[len(events)-1].Data), &saved))
-	assert.Equal(t, "persisted from read-only wrapper", saved.Content)
-	assert.Equal(t, "claude", saved.Agent)
+	require.NoError(json.Unmarshal([]byte(events[len(events)-1].Data), &saved))
+	assert.Equal("persisted from read-only wrapper", saved.Content)
+	assert.Equal("claude", saved.Agent)
 
-	stored, err := database.GetInsight(context.Background(), saved.ID)
-	require.NoError(t, err, "GetInsight after generate")
-	require.NotNil(t, stored)
-	assert.Equal(t, saved.ID, stored.ID)
-	assert.Equal(t, saved.Content, stored.Content)
+	stored, err := database.GetInsight(t.Context(), saved.ID)
+	require.NoError(err, "GetInsight after generate")
+	require.NotNil(stored)
+	assert.Equal(saved.ID, stored.ID)
+	assert.Equal(saved.Content, stored.Content)
 }
 
 func TestGenerateInsight_StaysBlockedForReadOnlyStoreWithoutInsightWrites(t *testing.T) {
@@ -522,6 +529,8 @@ func TestGenerateCannedInsight_RequiresExplicitOptIn(t *testing.T) {
 }
 
 func TestGenerateCannedInsight_AcceptsPartialSessionFilterPayload(t *testing.T) {
+	assert := assert.New(t)
+
 	var calls atomic.Int32
 	var generatedPrompt string
 	stubGen := func(
@@ -560,11 +569,11 @@ func TestGenerateCannedInsight_AcceptsPartialSessionFilterPayload(t *testing.T) 
 
 	assertStatus(t, w, http.StatusOK)
 	assertBodyContains(t, w, "event: done")
-	assert.Equal(t, int32(1), calls.Load())
-	assert.Contains(t, generatedPrompt, `"agent":"claude"`)
-	assert.Contains(t, generatedPrompt, `"timezone":"America/New_York"`)
-	assert.Contains(t, generatedPrompt, `"automated_scope":"human"`)
-	assert.Contains(t, generatedPrompt, `"include_one_shot":false`)
+	assert.Equal(int32(1), calls.Load())
+	assert.Contains(generatedPrompt, `"agent":"claude"`)
+	assert.Contains(generatedPrompt, `"timezone":"America/New_York"`)
+	assert.Contains(generatedPrompt, `"automated_scope":"human"`)
+	assert.Contains(generatedPrompt, `"include_one_shot":false`)
 }
 
 func TestGenerateCannedInsight_RejectsInvalidFilterTimezone(t *testing.T) {
@@ -705,7 +714,7 @@ func TestGenerateCannedInsight_SaveCacheAndPreserveSignals(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("UpdateSessionSignals: %v", err)
 	}
-	before, err := te.db.GetSession(context.Background(), "quality-1")
+	before, err := te.db.GetSession(t.Context(), "quality-1")
 	if err != nil {
 		t.Fatalf("GetSession before: %v", err)
 	}
@@ -738,7 +747,7 @@ func TestGenerateCannedInsight_SaveCacheAndPreserveSignals(t *testing.T) {
 		t.Fatalf("content missing generated label: %s", saved.Content)
 	}
 
-	after, err := te.db.GetSession(context.Background(), "quality-1")
+	after, err := te.db.GetSession(t.Context(), "quality-1")
 	if err != nil {
 		t.Fatalf("GetSession after: %v", err)
 	}
@@ -776,7 +785,7 @@ func TestGenerateCannedInsight_SaveCacheAndPreserveSignals(t *testing.T) {
 	if !strings.Contains(cached.ProvenanceJSON, `"cache_status":"hit"`) {
 		t.Fatalf("cached provenance missing hit status: %s", cached.ProvenanceJSON)
 	}
-	stored, err := te.db.GetInsight(context.Background(), saved.ID)
+	stored, err := te.db.GetInsight(t.Context(), saved.ID)
 	if err != nil {
 		t.Fatalf("GetInsight stored: %v", err)
 	}
@@ -975,6 +984,9 @@ func TestGenerateCannedInsight_AutomatedScopeOnlyAutomated(t *testing.T) {
 }
 
 func TestGenerateCannedInsight_UsesSessionFilterPayload(t *testing.T) {
+	assert := assert.New(t)
+	require := require.New(t)
+
 	var calls atomic.Int32
 	var generatedPrompts []string
 	stubGen := func(
@@ -1044,52 +1056,54 @@ func TestGenerateCannedInsight_UsesSessionFilterPayload(t *testing.T) {
 		s.TerminationStatus = &clean
 	})
 	const installationID = "0123456789abcdef0123456789abcdef"
-	require.NoError(t, te.db.AdoptMachineIdentity(t.Context(), installationID, []string{"workstation"}))
+	require.NoError(te.db.AdoptMachineIdentity(t.Context(), installationID, []string{"workstation"}))
 
 	firstPayload := `{"type":"llm_canned","kind":"prompt_maturity_review","date_from":"2025-01-15","date_to":"2025-01-15","project":"my-app","agent":"claude","llm_opt_in":true,"filters":{"timezone":"America/New_York","agent":"codex","machine":"workstation","termination":"clean","min_user_messages":2,"include_one_shot":false,"automated_scope":"human"}}`
 	w := te.post(t, "/api/v1/insights/generate", firstPayload)
 	assertStatus(t, w, http.StatusOK)
-	require.Equal(t, int32(1), calls.Load())
-	require.Len(t, generatedPrompts, 1)
-	assert.Contains(t, generatedPrompts[0], `"timezone":"America/New_York"`)
-	assert.Contains(t, generatedPrompts[0], `"agent":"codex"`)
-	assert.Contains(t, generatedPrompts[0], `"session_count":1`)
-	assert.Contains(t, generatedPrompts[0], codexPrompt)
-	assert.NotContains(t, generatedPrompts[0], claudePrompt)
-	assert.NotContains(t, generatedPrompts[0], wrongMachinePrompt)
-	assert.NotContains(t, generatedPrompts[0], oneShotPrompt)
-	assert.Contains(t, generatedPrompts[0], `"machine":"`+installationID+`"`)
+	require.Equal(int32(1), calls.Load())
+	require.Len(generatedPrompts, 1)
+	assert.Contains(generatedPrompts[0], `"timezone":"America/New_York"`)
+	assert.Contains(generatedPrompts[0], `"agent":"codex"`)
+	assert.Contains(generatedPrompts[0], `"session_count":1`)
+	assert.Contains(generatedPrompts[0], codexPrompt)
+	assert.NotContains(generatedPrompts[0], claudePrompt)
+	assert.NotContains(generatedPrompts[0], wrongMachinePrompt)
+	assert.NotContains(generatedPrompts[0], oneShotPrompt)
+	assert.Contains(generatedPrompts[0], `"machine":"`+installationID+`"`)
 	events := parseSSE(w.Body.String())
-	require.NotEmpty(t, events)
-	require.Equal(t, "done", events[len(events)-1].Event, w.Body.String())
+	require.NotEmpty(events)
+	require.Equal("done", events[len(events)-1].Event, w.Body.String())
 	var saved db.Insight
-	require.NoError(t, json.Unmarshal([]byte(events[len(events)-1].Data), &saved))
-	assert.Contains(t, saved.ProvenanceJSON, `"machine":"`+installationID+`"`)
+	require.NoError(json.Unmarshal([]byte(events[len(events)-1].Data), &saved))
+	assert.Contains(saved.ProvenanceJSON, `"machine":"`+installationID+`"`)
 
 	canonicalPayload := strings.Replace(firstPayload, `"machine":"workstation"`, `"machine":"`+installationID+`"`, 1)
 	w = te.post(t, "/api/v1/insights/generate", canonicalPayload)
 	assertStatus(t, w, http.StatusOK)
-	require.Equal(t, int32(1), calls.Load(), "alias and installation ID must share the cached insight")
+	require.Equal(int32(1), calls.Load(), "alias and installation ID must share the cached insight")
 	events = parseSSE(w.Body.String())
-	require.NotEmpty(t, events)
-	require.Equal(t, "done", events[len(events)-1].Event, w.Body.String())
+	require.NotEmpty(events)
+	require.Equal("done", events[len(events)-1].Event, w.Body.String())
 	var cached db.Insight
-	require.NoError(t, json.Unmarshal([]byte(events[len(events)-1].Data), &cached))
-	assert.Equal(t, saved.ID, cached.ID)
-	assert.Equal(t, "hit", cached.CacheStatus)
+	require.NoError(json.Unmarshal([]byte(events[len(events)-1].Data), &cached))
+	assert.Equal(saved.ID, cached.ID)
+	assert.Equal("hit", cached.CacheStatus)
 
 	secondPayload := `{"type":"llm_canned","kind":"prompt_maturity_review","date_from":"2025-01-15","date_to":"2025-01-15","project":"my-app","agent":"claude","llm_opt_in":true,"filters":{"timezone":"America/New_York","agent":"claude","machine":"workstation","termination":"clean","min_user_messages":2,"include_one_shot":false,"automated_scope":"human"}}`
 	w = te.post(t, "/api/v1/insights/generate", secondPayload)
 	assertStatus(t, w, http.StatusOK)
-	require.Equal(t, int32(2), calls.Load())
-	require.Len(t, generatedPrompts, 2)
-	assert.Contains(t, generatedPrompts[1], `"agent":"claude"`)
-	assert.Contains(t, generatedPrompts[1], `"session_count":1`)
-	assert.Contains(t, generatedPrompts[1], claudePrompt)
-	assert.NotContains(t, generatedPrompts[1], codexPrompt)
+	require.Equal(int32(2), calls.Load())
+	require.Len(generatedPrompts, 2)
+	assert.Contains(generatedPrompts[1], `"agent":"claude"`)
+	assert.Contains(generatedPrompts[1], `"session_count":1`)
+	assert.Contains(generatedPrompts[1], claudePrompt)
+	assert.NotContains(generatedPrompts[1], codexPrompt)
 }
 
 func TestGenerateCannedInsight_CoachSummaryUsesFilterTimezone(t *testing.T) {
+	assert := assert.New(t)
+
 	var generatedPrompt string
 	stubGen := func(
 		_ context.Context, _ string, prompt string, _ insight.LogFunc,
@@ -1141,13 +1155,15 @@ func TestGenerateCannedInsight_CoachSummaryUsesFilterTimezone(t *testing.T) {
 	w := te.post(t, "/api/v1/insights/generate", payload)
 	assertStatus(t, w, http.StatusOK)
 
-	assert.Contains(t, generatedPrompt, `"timezone":"America/Los_Angeles"`)
-	assert.Contains(t, generatedPrompt, `"session_count":1`)
-	assert.Contains(t, generatedPrompt, localDayPrompt)
-	assert.NotContains(t, generatedPrompt, previousLocalDayPrompt)
+	assert.Contains(generatedPrompt, `"timezone":"America/Los_Angeles"`)
+	assert.Contains(generatedPrompt, `"session_count":1`)
+	assert.Contains(generatedPrompt, localDayPrompt)
+	assert.NotContains(generatedPrompt, previousLocalDayPrompt)
 }
 
 func TestGenerateCannedInsight_CoachSummaryUsesTopLevelTimezone(t *testing.T) {
+	assert := assert.New(t)
+
 	var generatedPrompt string
 	stubGen := func(
 		_ context.Context, _ string, prompt string, _ insight.LogFunc,
@@ -1199,10 +1215,10 @@ func TestGenerateCannedInsight_CoachSummaryUsesTopLevelTimezone(t *testing.T) {
 	w := te.post(t, "/api/v1/insights/generate", payload)
 	assertStatus(t, w, http.StatusOK)
 
-	assert.Contains(t, generatedPrompt, `"timezone":"America/Los_Angeles"`)
-	assert.Contains(t, generatedPrompt, `"session_count":1`)
-	assert.Contains(t, generatedPrompt, localDayPrompt)
-	assert.NotContains(t, generatedPrompt, previousLocalDayPrompt)
+	assert.Contains(generatedPrompt, `"timezone":"America/Los_Angeles"`)
+	assert.Contains(generatedPrompt, `"session_count":1`)
+	assert.Contains(generatedPrompt, localDayPrompt)
+	assert.NotContains(generatedPrompt, previousLocalDayPrompt)
 }
 
 func TestGenerateCannedInsight_RejectsOversizedFocus(t *testing.T) {
@@ -1309,9 +1325,7 @@ func TestGenerateInsight_ErrorMessageStripsStderr(t *testing.T) {
 	stubGen := func(
 		_ context.Context, _, _ string,
 	) (insight.Result, error) {
-		return insight.Result{}, fmt.Errorf(
-			"claude CLI failed: exit status 1\nstderr: some debug output",
-		)
+		return insight.Result{}, errors.New("claude CLI failed: exit status 1\nstderr: some debug output")
 	}
 	te := setupWithServerOpts(t, []server.Option{
 		server.WithGenerateFunc(stubGen),
@@ -1330,9 +1344,7 @@ func TestGenerateInsight_ErrorMessageStripsRaw(t *testing.T) {
 	stubGen := func(
 		_ context.Context, _, _ string,
 	) (insight.Result, error) {
-		return insight.Result{}, fmt.Errorf(
-			"claude returned empty result\nraw: {\"type\":\"result\",\"result\":\"\"}",
-		)
+		return insight.Result{}, errors.New("claude returned empty result\nraw: {\"type\":\"result\",\"result\":\"\"}")
 	}
 	te := setupWithServerOpts(t, []server.Option{
 		server.WithGenerateFunc(stubGen),
@@ -1358,7 +1370,7 @@ func TestGenerateInsight_InitialStatusWriteFailureSkipsGeneration(t *testing.T) 
 		}),
 	})
 
-	req := httptest.NewRequest(
+	req := httptest.NewRequestWithContext(t.Context(),
 		http.MethodPost, "/api/v1/insights/generate",
 		strings.NewReader(
 			`{"type":"daily_activity","date_from":"2025-01-15","date_to":"2025-01-15","agent":"claude"}`,
@@ -1374,6 +1386,8 @@ func TestGenerateInsight_InitialStatusWriteFailureSkipsGeneration(t *testing.T) 
 }
 
 func TestGenerateInsight_StreamsLogs(t *testing.T) {
+	require := require.New(t)
+
 	stubGen := func(
 		_ context.Context, _ string, _ string, onLog insight.LogFunc,
 	) (insight.Result, error) {
@@ -1400,19 +1414,19 @@ func TestGenerateInsight_StreamsLogs(t *testing.T) {
 	assertStatus(t, w, http.StatusOK)
 
 	events := parseSSE(w.Body.String())
-	require.GreaterOrEqual(t, len(events), 4, "expected >=4 SSE events: %s", w.Body.String())
-	require.Equal(t, "status", events[0].Event, "first event")
-	require.Equal(t, "log", events[1].Event, "events: %#v", events)
-	require.Equal(t, "log", events[2].Event, "events: %#v", events)
-	require.Equal(t, "done", events[len(events)-1].Event, "last event")
+	require.GreaterOrEqual(len(events), 4, "expected >=4 SSE events: %s", w.Body.String())
+	require.Equal("status", events[0].Event, "first event")
+	require.Equal("log", events[1].Event, "events: %#v", events)
+	require.Equal("log", events[2].Event, "events: %#v", events)
+	require.Equal("done", events[len(events)-1].Event, "last event")
 
 	var log1 insight.LogEvent
-	require.NoError(t, json.Unmarshal([]byte(events[1].Data), &log1))
-	require.Equal(t, "stdout", log1.Stream)
+	require.NoError(json.Unmarshal([]byte(events[1].Data), &log1))
+	require.Equal("stdout", log1.Stream)
 
 	var log2 insight.LogEvent
-	require.NoError(t, json.Unmarshal([]byte(events[2].Data), &log2))
-	require.Equal(t, "stderr", log2.Stream)
+	require.NoError(json.Unmarshal([]byte(events[2].Data), &log2))
+	require.Equal("stderr", log2.Stream)
 }
 
 type slowFlushRecorder struct {
@@ -1641,7 +1655,7 @@ func TestGenerateInsight_LogDropSummaryAndCompletion(t *testing.T) {
 		server.WithInsightLogDrainTimeouts(30*time.Second, time.Second),
 	})
 
-	req := httptest.NewRequest(
+	req := httptest.NewRequestWithContext(t.Context(),
 		http.MethodPost, "/api/v1/insights/generate",
 		strings.NewReader(
 			`{"type":"daily_activity","date_from":"2025-01-15","date_to":"2025-01-15","agent":"claude"}`,
@@ -1712,7 +1726,7 @@ func TestGenerateInsight_LogDrainTimeoutReturnsWithoutHang(t *testing.T) {
 		fastInsightLogDrainTimeouts(),
 	})
 
-	req := httptest.NewRequest(
+	req := httptest.NewRequestWithContext(t.Context(),
 		http.MethodPost, "/api/v1/insights/generate",
 		strings.NewReader(
 			`{"type":"daily_activity","date_from":"2025-01-15","date_to":"2025-01-15","agent":"claude"}`,
@@ -1748,6 +1762,8 @@ func TestGenerateInsight_LogDrainTimeoutReturnsWithoutHang(t *testing.T) {
 }
 
 func TestGenerateInsight_LogDrainTimeoutReportsBufferedDrops(t *testing.T) {
+	require := require.New(t)
+
 	stubGen := func(
 		_ context.Context, _ string, _ string, onLog insight.LogFunc,
 	) (insight.Result, error) {
@@ -1767,7 +1783,7 @@ func TestGenerateInsight_LogDrainTimeoutReportsBufferedDrops(t *testing.T) {
 		fastInsightLogDrainTimeouts(),
 	})
 
-	req := httptest.NewRequest(
+	req := httptest.NewRequestWithContext(t.Context(),
 		http.MethodPost, "/api/v1/insights/generate",
 		strings.NewReader(
 			`{"type":"daily_activity","date_from":"2025-01-15","date_to":"2025-01-15","agent":"claude"}`,
@@ -1788,7 +1804,7 @@ func TestGenerateInsight_LogDrainTimeoutReportsBufferedDrops(t *testing.T) {
 	select {
 	case <-done:
 	case <-time.After(10 * time.Second):
-		require.Fail(t, "timed out waiting for generate handler completion")
+		require.Fail("timed out waiting for generate handler completion")
 	}
 
 	assertStatus(t, w.ResponseRecorder, http.StatusOK)
@@ -1796,7 +1812,7 @@ func TestGenerateInsight_LogDrainTimeoutReportsBufferedDrops(t *testing.T) {
 	foundTimeoutError := false
 	foundDropSummary := false
 	for _, ev := range events {
-		require.NotEqual(t, "done", ev.Event,
+		require.NotEqual("done", ev.Event,
 			"did not expect done event when timeout path is triggered")
 		if ev.Event == "error" &&
 			strings.Contains(ev.Data, "timed out before completion") {
@@ -1822,13 +1838,13 @@ func TestGenerateInsight_LogDrainTimeoutReportsBufferedDrops(t *testing.T) {
 		if err != nil {
 			continue
 		}
-		require.Positive(t, dropped,
+		require.Positive(dropped,
 			"expected timeout drop summary to report at least one dropped log line (%q)", line.Line)
 		foundDropSummary = true
 	}
-	require.True(t, foundTimeoutError,
+	require.True(foundTimeoutError,
 		"expected timeout error event, got %d events", len(events))
-	require.True(t, foundDropSummary,
+	require.True(foundDropSummary,
 		"expected timeout-aware drop summary, got %d events", len(events))
 }
 
@@ -1844,7 +1860,7 @@ func TestGenerateInsight_LogDrainTimeoutBoundedWhenWriterStuck(t *testing.T) {
 		fastInsightLogDrainTimeouts(),
 	})
 
-	req := httptest.NewRequest(
+	req := httptest.NewRequestWithContext(t.Context(),
 		http.MethodPost, "/api/v1/insights/generate",
 		strings.NewReader(
 			`{"type":"daily_activity","date_from":"2025-01-15","date_to":"2025-01-15","agent":"claude"}`,
@@ -1883,6 +1899,8 @@ func TestGenerateInsight_LogDrainTimeoutBoundedWhenWriterStuck(t *testing.T) {
 }
 
 func TestGenerateInsight_LogDrainTimeoutForceUnblocksAndNoPostReturnWrites(t *testing.T) {
+	require := require.New(t)
+
 	stubGen := func(
 		_ context.Context, _ string, _ string, onLog insight.LogFunc,
 	) (insight.Result, error) {
@@ -1894,7 +1912,7 @@ func TestGenerateInsight_LogDrainTimeoutForceUnblocksAndNoPostReturnWrites(t *te
 		fastInsightLogDrainTimeouts(),
 	})
 
-	req := httptest.NewRequest(
+	req := httptest.NewRequestWithContext(t.Context(),
 		http.MethodPost, "/api/v1/insights/generate",
 		strings.NewReader(
 			`{"type":"daily_activity","date_from":"2025-01-15","date_to":"2025-01-15","agent":"claude"}`,
@@ -1914,28 +1932,28 @@ func TestGenerateInsight_LogDrainTimeoutForceUnblocksAndNoPostReturnWrites(t *te
 	select {
 	case <-done:
 	case <-time.After(8 * time.Second):
-		require.Fail(t, "timed out waiting for forced-unblock completion")
+		require.Fail("timed out waiting for forced-unblock completion")
 	}
 
 	select {
 	case <-w.PostReturnAttempted():
-		require.Fail(t, "expected no writes after handler return")
+		require.Fail("expected no writes after handler return")
 	case <-time.After(100 * time.Millisecond):
 	}
-	require.Zero(t, w.PostReturnWrites(), "expected no writes after handler return")
+	require.Zero(w.PostReturnWrites(), "expected no writes after handler return")
 
 	assertStatus(t, w.ResponseRecorder, http.StatusOK)
 	events := parseSSE(w.BodyString())
 	foundTimeoutError := false
 	for _, ev := range events {
-		require.NotEqual(t, "done", ev.Event,
+		require.NotEqual("done", ev.Event,
 			"did not expect done event on forced-unblock timeout path")
 		if ev.Event == "error" &&
 			strings.Contains(ev.Data, "timed out before completion") {
 			foundTimeoutError = true
 		}
 	}
-	require.True(t, foundTimeoutError, "expected timeout error event")
+	require.True(foundTimeoutError, "expected timeout error event")
 }
 
 func TestDeleteInsight_Found(t *testing.T) {

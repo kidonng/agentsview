@@ -5263,6 +5263,8 @@ components:
       properties:
         error:
           type: string
+        error_code:
+          type: string
         failures:
           items:
             $ref: "#/components/schemas/RemoteSyncFailure"

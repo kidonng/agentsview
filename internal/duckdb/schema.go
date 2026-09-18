@@ -17,7 +17,7 @@ import (
 // cache-write rate columns on top of v11's raw GenAI pricing document. v13
 // adds row-level provider identity to messages and usage events. v14 adds
 // reasoning effort to messages. v15 adds explicit session-project assignment state.
-const SchemaVersion = 15
+const SchemaVersion = 16
 
 const schemaVersionMetadataKey = "agentsview_schema_version"
 
@@ -463,10 +463,10 @@ var mirrorTables = []tableSpec{
 	{
 		name: "genai_pricing",
 		create: `CREATE TABLE IF NOT EXISTS genai_pricing (
-			singleton SMALLINT PRIMARY KEY CHECK (singleton = 1),
+			singleton SMALLINT PRIMARY KEY,
 			version TEXT NOT NULL,
 			source_ref TEXT NOT NULL DEFAULT '',
-			source TEXT NOT NULL CHECK (source IN ('embedded', 'fetched')),
+			source TEXT NOT NULL,
 			data_json BLOB NOT NULL,
 			updated_at TEXT NOT NULL DEFAULT ''
 		)`,

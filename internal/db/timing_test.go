@@ -1,7 +1,6 @@
 package db
 
 import (
-	"context"
 	"encoding/json/v2"
 	"strings"
 	"testing"
@@ -19,30 +18,30 @@ import (
 // reporting Running: true and starts reporting a bounded duration, matching
 // what every other provider's live sessions already do.
 func TestAssembleTiming_HermesBackfilledEndedAtStopsReportingRunning(t *testing.T) {
+	assert := assert.New(t)
+
 	now := time.Date(2026, 9, 8, 18, 0, 0, 0, time.UTC)
 	startedAt := "2026-09-08T14:39:23Z"
 	newestMessage := "2026-09-08T17:00:00Z"
 
 	live := &Session{ID: "hermes:open1", StartedAt: &startedAt}
 	liveTiming := AssembleTiming(live, nil, nil, now)
-	assert.True(t, liveTiming.Running,
+	assert.True(liveTiming.Running,
 		"today's shape: a nil EndedAt reports Running true")
-	assert.Equal(t,
-		millisBetween(startedAt, now.Format(time.RFC3339)),
+	assert.Equal(millisBetween(startedAt, now.Format(time.RFC3339)),
 		liveTiming.TotalDurationMs)
 
 	backfilled := &Session{ID: "hermes:open1", StartedAt: &startedAt, EndedAt: &newestMessage}
 	backfilledTiming := AssembleTiming(backfilled, nil, nil, now)
-	assert.False(t, backfilledTiming.Running,
+	assert.False(backfilledTiming.Running,
 		"head's shape: EndedAt back-filled to the newest message time reports Running false")
-	assert.Equal(t,
-		millisBetween(startedAt, newestMessage),
+	assert.Equal(millisBetween(startedAt, newestMessage),
 		backfilledTiming.TotalDurationMs)
 }
 
 func TestGetSessionTiming_ReadOnlyFixture(t *testing.T) {
 	d := testDB(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	timingInsertSession(t, d, "solo",
 		"2026-04-26T10:00:00Z", "2026-04-26T10:00:30Z")
@@ -146,44 +145,53 @@ func TestGetSessionTiming_ReadOnlyFixture(t *testing.T) {
 		"done", "2026-04-26T10:02:16Z", false)
 
 	t.Run("solo", func(t *testing.T) {
+		assert := assert.New(t)
+		require := require.New(t)
+
 		got, err := d.GetSessionTiming(ctx, "solo")
-		require.NoError(t, err, "GetSessionTiming")
-		assert.Equal(t, 1, got.TurnCount, "TurnCount")
-		assert.Equal(t, 1, got.ToolCallCount, "ToolCallCount")
-		assert.False(t, got.Running, "Running")
-		require.Len(t, got.Turns, 1, "len(Turns)")
-		require.NotNil(t, got.Turns[0].DurationMs, "turn duration")
-		assert.Equal(t, int64(29_000), *got.Turns[0].DurationMs, "turn duration")
-		require.NotNil(t, got.Turns[0].Calls[0].DurationMs, "call duration")
-		assert.Equal(t, int64(29_000), *got.Turns[0].Calls[0].DurationMs, "call duration")
+		require.NoError(err, "GetSessionTiming")
+		assert.Equal(1, got.TurnCount, "TurnCount")
+		assert.Equal(1, got.ToolCallCount, "ToolCallCount")
+		assert.False(got.Running, "Running")
+		require.Len(got.Turns, 1, "len(Turns)")
+		require.NotNil(got.Turns[0].DurationMs, "turn duration")
+		assert.Equal(int64(29_000), *got.Turns[0].DurationMs, "turn duration")
+		require.NotNil(got.Turns[0].Calls[0].DurationMs, "call duration")
+		assert.Equal(int64(29_000), *got.Turns[0].Calls[0].DurationMs, "call duration")
 	})
 
 	t.Run("completed call excludes idle time before next user message", func(t *testing.T) {
+		assert := assert.New(t)
+		require := require.New(t)
+
 		got, err := d.GetSessionTiming(ctx, "completed-call")
-		require.NoError(t, err, "GetSessionTiming")
-		require.Len(t, got.Turns, 1)
-		require.Len(t, got.Turns[0].Calls, 1)
-		require.NotNil(t, got.Turns[0].DurationMs)
-		assert.Equal(t, int64(3_825), *got.Turns[0].DurationMs)
-		require.NotNil(t, got.Turns[0].Calls[0].DurationMs)
-		assert.Equal(t, int64(3_725), *got.Turns[0].Calls[0].DurationMs)
-		assert.Equal(t, int64(3_825), got.ToolDurationMs)
-		require.NotNil(t, got.SlowestCall)
-		assert.Equal(t, "task_complete", got.SlowestCall.ToolName)
-		assert.Equal(t, int64(3_725), *got.SlowestCall.DurationMs)
-		require.Len(t, got.ByCategory, 1)
-		assert.Equal(t, int64(3_825), got.ByCategory[0].DurationMs)
+		require.NoError(err, "GetSessionTiming")
+		require.Len(got.Turns, 1)
+		require.Len(got.Turns[0].Calls, 1)
+		require.NotNil(got.Turns[0].DurationMs)
+		assert.Equal(int64(3_825), *got.Turns[0].DurationMs)
+		require.NotNil(got.Turns[0].Calls[0].DurationMs)
+		assert.Equal(int64(3_725), *got.Turns[0].Calls[0].DurationMs)
+		assert.Equal(int64(3_825), got.ToolDurationMs)
+		require.NotNil(got.SlowestCall)
+		assert.Equal("task_complete", got.SlowestCall.ToolName)
+		assert.Equal(int64(3_725), *got.SlowestCall.DurationMs)
+		require.Len(got.ByCategory, 1)
+		assert.Equal(int64(3_825), got.ByCategory[0].DurationMs)
 	})
 
 	t.Run("last message falls back to session end", func(t *testing.T) {
+		assert := assert.New(t)
+		require := require.New(t)
+
 		got, err := d.GetSessionTiming(ctx, "fallback")
-		require.NoError(t, err, "GetSessionTiming")
-		require.NotNil(t, got.Turns[0].DurationMs,
+		require.NoError(err, "GetSessionTiming")
+		require.NotNil(got.Turns[0].DurationMs,
 			"turn duration nil, want 20000 (fallback to ended_at)")
-		assert.Equal(t, int64(20_000), *got.Turns[0].DurationMs,
+		assert.Equal(int64(20_000), *got.Turns[0].DurationMs,
 			"turn duration (fallback to ended_at)")
-		require.NotNil(t, got.Turns[0].Calls[0].DurationMs, "call duration")
-		assert.Equal(t, int64(20_000), *got.Turns[0].Calls[0].DurationMs,
+		require.NotNil(got.Turns[0].Calls[0].DurationMs, "call duration")
+		assert.Equal(int64(20_000), *got.Turns[0].Calls[0].DurationMs,
 			"call duration (solo non-subagent inherits turn duration)")
 	})
 
@@ -207,19 +215,21 @@ func TestGetSessionTiming_ReadOnlyFixture(t *testing.T) {
 	})
 
 	t.Run("marshals empty collections as arrays", func(t *testing.T) {
+		require := require.New(t)
+
 		noTool, err := d.GetSessionTiming(ctx, "notool")
-		require.NoError(t, err, "GetSessionTiming(notool)")
-		require.NotNil(t, noTool.ByCategory, "ByCategory is nil, want empty slice")
-		require.NotNil(t, noTool.Turns, "Turns is nil, want empty slice")
+		require.NoError(err, "GetSessionTiming(notool)")
+		require.NotNil(noTool.ByCategory, "ByCategory is nil, want empty slice")
+		require.NotNil(noTool.Turns, "Turns is nil, want empty slice")
 
 		missingCalls, err := d.GetSessionTiming(ctx, "missing-calls")
-		require.NoError(t, err, "GetSessionTiming(missing-calls)")
-		require.Len(t, missingCalls.Turns, 1, "len(Turns)")
-		require.NotNil(t, missingCalls.Turns[0].Calls,
+		require.NoError(err, "GetSessionTiming(missing-calls)")
+		require.Len(missingCalls.Turns, 1, "len(Turns)")
+		require.NotNil(missingCalls.Turns[0].Calls,
 			"Turn Calls is nil, want empty slice")
 
 		payload, err := json.Marshal(missingCalls)
-		require.NoError(t, err, "Marshal timing")
+		require.NoError(err, "Marshal timing")
 		body := string(payload)
 		for _, field := range []string{
 			`"by_category":null`,
@@ -231,12 +241,15 @@ func TestGetSessionTiming_ReadOnlyFixture(t *testing.T) {
 	})
 
 	t.Run("subagent exact duration", func(t *testing.T) {
+		assert := assert.New(t)
+		require := require.New(t)
+
 		got, err := d.GetSessionTiming(ctx, "parent")
-		require.NoError(t, err, "GetSessionTiming")
+		require.NoError(err, "GetSessionTiming")
 		dms := got.Turns[0].Calls[0].DurationMs
-		require.NotNil(t, dms, "subagent duration")
-		assert.Equal(t, int64(134_000), *dms, "subagent duration")
-		assert.Equal(t, 1, got.SubagentCount, "SubagentCount")
+		require.NotNil(dms, "subagent duration")
+		assert.Equal(int64(134_000), *dms, "subagent duration")
+		assert.Equal(1, got.SubagentCount, "SubagentCount")
 	})
 
 	t.Run("missing session returns nil", func(t *testing.T) {
@@ -351,7 +364,7 @@ func timingInsertSession(t *testing.T, d *DB, id, started, ended string) {
 	if ended != "" {
 		endedAt = ended
 	}
-	_, err := d.getWriter().ExecContext(context.Background(), `
+	_, err := d.getWriter().ExecContext(t.Context(), `
 		INSERT INTO sessions
 			(id, project, machine, agent, message_count,
 			 started_at, ended_at)
@@ -370,7 +383,7 @@ func timingInsertMessage(
 	if hasToolUse {
 		flag = 1
 	}
-	_, err := d.getWriter().ExecContext(context.Background(), `
+	_, err := d.getWriter().ExecContext(t.Context(), `
 		INSERT INTO messages
 			(session_id, ordinal, role, content, timestamp,
 			 has_tool_use)
@@ -384,7 +397,7 @@ func timingMsgID(
 ) int64 {
 	t.Helper()
 	var id int64
-	err := d.getReader().QueryRowContext(context.Background(),
+	err := d.getReader().QueryRowContext(t.Context(),
 		`SELECT id FROM messages
 		 WHERE session_id = ? AND ordinal = ?`,
 		sessionID, ordinal,
@@ -403,7 +416,7 @@ func timingInsertToolCall(
 	if subagentSessionID != "" {
 		sub = subagentSessionID
 	}
-	_, err := d.getWriter().ExecContext(context.Background(), `
+	_, err := d.getWriter().ExecContext(t.Context(), `
 		INSERT INTO tool_calls
 			(session_id, message_id, tool_use_id, tool_name,
 			 category, input_json, subagent_session_id, call_index)
@@ -417,7 +430,7 @@ func timingInsertToolResultEvent(
 	toolUseID, status, timestamp string, eventIndex int,
 ) {
 	t.Helper()
-	_, err := d.getWriter().ExecContext(context.Background(), `
+	_, err := d.getWriter().ExecContext(t.Context(), `
 		INSERT INTO tool_result_events
 			(session_id, tool_call_message_ordinal, call_index,
 			 tool_use_id, source, status, content, timestamp, event_index)

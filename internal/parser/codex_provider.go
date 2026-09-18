@@ -14,12 +14,14 @@ import (
 	"go.kenn.io/agentsview/internal/pathutil"
 )
 
-var _ Provider = (*codexProvider)(nil)
-var _ ActivityHintProvider = (*codexProvider)(nil)
-var _ S3Provider = (*codexProvider)(nil)
-var _ RawCaptureProvider = (*codexProvider)(nil)
-var _ RawCaptureSourceProvider = (*codexProvider)(nil)
-var _ StreamingRawCaptureSourceProvider = (*codexProvider)(nil)
+var (
+	_ Provider                          = (*codexProvider)(nil)
+	_ ActivityHintProvider              = (*codexProvider)(nil)
+	_ S3Provider                        = (*codexProvider)(nil)
+	_ RawCaptureProvider                = (*codexProvider)(nil)
+	_ RawCaptureSourceProvider          = (*codexProvider)(nil)
+	_ StreamingRawCaptureSourceProvider = (*codexProvider)(nil)
+)
 
 // codexProviderSpec parameterizes the one shared Codex-format provider
 // implementation for Codex and its TraeX fork. Both reuse the same
@@ -464,7 +466,7 @@ func (p *codexProvider) Parse(
 	}
 	path, ok := p.sources.pathFromSource(req.Source)
 	if !ok {
-		return ParseOutcome{}, fmt.Errorf("codex source path unavailable")
+		return ParseOutcome{}, errors.New("codex source path unavailable")
 	}
 	if req.ForceParse && p.spec.agent == AgentCodex {
 		for _, index := range p.sources.metadata.IndexPaths(path) {
@@ -472,8 +474,7 @@ func (p *codexProvider) Parse(
 		}
 	}
 	machine := firstNonEmptyJSONLString(req.Machine, p.Config.Machine)
-	sess, msgs, cursor, safe, hashState, anchorDigest, retryReason, err :=
-		p.parseSessionWithCursor(ctx, path, machine, false)
+	sess, msgs, cursor, safe, hashState, anchorDigest, retryReason, err := p.parseSessionWithCursor(ctx, path, machine, false)
 	if err != nil {
 		return ParseOutcome{}, err
 	}
@@ -542,7 +543,7 @@ func ParseCodexSessionStreaming(
 	provider, ok := NewProvider(AgentCodex, cfg)
 	if !ok {
 		return nil, nil, nil, nil, "", "",
-			fmt.Errorf("constructing codex provider")
+			errors.New("constructing codex provider")
 	}
 	cp, ok := provider.(*codexProvider)
 	if !ok {
@@ -552,7 +553,7 @@ func ParseCodexSessionStreaming(
 	path, ok := cp.sources.pathFromSource(source)
 	if !ok {
 		return nil, nil, nil, nil, "", "",
-			fmt.Errorf("codex source path unavailable")
+			errors.New("codex source path unavailable")
 	}
 	f, err := os.Open(path)
 	if err != nil {
@@ -563,12 +564,11 @@ func ParseCodexSessionStreaming(
 	if err != nil {
 		return nil, nil, nil, nil, "", "", fmt.Errorf("stat %s: %w", path, err)
 	}
-	sess, msgs, cursor, safe, hashState, anchorDigest, retryReason, err :=
-		cp.parseCodexSessionSnapshotStreaming(
-			ctx, path,
-			firstNonEmptyJSONLString("", cfg.Machine),
-			false, f, info, sink,
-		)
+	sess, msgs, cursor, safe, hashState, anchorDigest, retryReason, err := cp.parseCodexSessionSnapshotStreaming(
+		ctx, path,
+		firstNonEmptyJSONLString("", cfg.Machine),
+		false, f, info, sink,
+	)
 	if err != nil {
 		return nil, nil, nil, nil, "", "", err
 	}
@@ -600,7 +600,7 @@ func (p *codexProvider) ParseIncremental(
 	path, ok := p.sources.pathFromSource(req.Source)
 	if !ok {
 		return IncrementalOutcome{}, IncrementalUnsupported,
-			fmt.Errorf("codex source path unavailable")
+			errors.New("codex source path unavailable")
 	}
 	if req.Offset < 0 || req.Fingerprint.Size < req.Offset {
 		return IncrementalOutcome{ForceReplace: true},
@@ -702,8 +702,7 @@ func (p *codexProvider) ParseIncremental(
 		p.spec.relabel(nil, result.messages)
 	}
 
-	totalOut, peakCtx, hasTotalOut, hasPeakCtx :=
-		codexProviderTokenTotals(result.messages)
+	totalOut, peakCtx, hasTotalOut, hasPeakCtx := codexProviderTokenTotals(result.messages)
 	termination := codexIncrementalTermination(result.cursor.lastTaskEvent)
 	var nextCursor []byte
 	if !result.cursor.pendingCallsOverflow {
@@ -1090,7 +1089,7 @@ func (s codexSourceSet) Fingerprint(
 	}
 	path, ok := s.pathFromSource(source)
 	if !ok {
-		return SourceFingerprint{}, fmt.Errorf("codex source path unavailable")
+		return SourceFingerprint{}, errors.New("codex source path unavailable")
 	}
 	info, err := os.Stat(path)
 	if err != nil {
